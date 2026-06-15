@@ -98,6 +98,34 @@ Abgeschlossen: 2026-06-15
 
 ---
 
-## Block 4 und folgende
+## Block 4: addresses und energy_demands ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000004_block4_addresses_energy_demands.sql`
+- [x] Enum `address_type` angelegt: `delivery`, `billing`, `contact`
+- [x] Enum `energy_type` angelegt: `electricity`, `gas`
+- [x] `addresses`-Tabelle mit UNIQUE `(lead_id, address_type)`, FK `ON DELETE CASCADE`
+- [x] `energy_demands`-Tabelle mit UNIQUE `(lead_id, energy_type)`, FK `ON DELETE CASCADE`
+- [x] CHECK `hot_water_with_gas IS NULL OR energy_type = 'gas'`
+- [x] Trigger `set_addresses_updated_at` und `set_energy_demands_updated_at`
+- [x] `docs/database-decisions.md` aktualisiert
+
+### Entscheidungen
+
+- `energy_type` ist ein eigener Enum (electricity, gas) — `product_type` wird nicht
+  wiederverwendet, weil `'both'` in energy_demands fachlich falsch wäre
+- ON DELETE CASCADE (nicht RESTRICT): Adressen und Energiedaten sind existenziell
+  vom Lead abhängig und werden bei DSGVO-Löschung automatisch mitentfernt
+- `country` DEFAULT `'DE'` — ausschließlich deutscher Energiemarkt
+- `meter_number` bleibt nullable — kommt aus Rechnungen, nicht aus dem Formular
+- Scoring-Punkt "Rechnung hochgeladen" wird über `documents`-Tabelle bewertet,
+  nicht über `meter_number IS NOT NULL` (dokumentiert in database-decisions.md)
+
+---
+
+## Block 5 und folgende
 
 Status: ausstehend

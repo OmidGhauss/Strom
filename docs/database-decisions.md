@@ -65,6 +65,45 @@ anfragt, hat `customer_type = 'business'` und `product_type = 'electricity'`.
 
 ---
 
+## ON DELETE CASCADE vs. RESTRICT
+
+`addresses` und `energy_demands` verwenden `ON DELETE CASCADE` auf `leads(id)`.
+`profiles` verwendet `ON DELETE RESTRICT` auf `auth.users(id)`.
+
+Der Unterschied ist fachlich begründet:
+
+- `profiles` ist eine eigenständige Entität (Mitarbeiter-Account). Mitarbeiter werden
+  nie gelöscht, sondern deaktiviert. RESTRICT verhindert versehentliches Löschen.
+
+- `addresses` und `energy_demands` sind existenziell vom Lead abhängig. Sie haben
+  außerhalb des Leads keine Bedeutung. Wenn ein Lead gelöscht wird (z. B. DSGVO-
+  Löschung), sollen alle zugehörigen Daten automatisch mitentfernt werden.
+
+Dieselbe Regel gilt für alle weiteren Lead-abhängigen Tabellen:
+`lead_status_history`, `lead_notes`, `documents`, `offers`, `communications_log`
+→ alle verwenden `ON DELETE CASCADE`.
+
+---
+
+## Lead-Scoring: "Rechnung hochgeladen"
+
+Der Scoring-Punkt "Rechnung hochgeladen: +25" wird **nicht** über
+`energy_demands.meter_number IS NOT NULL` bewertet.
+
+Quelle der Wahrheit ist die `documents`-Tabelle mit `document_type = 'invoice'`:
+
+```
+SELECT COUNT(*) > 0
+FROM documents
+WHERE lead_id = $1 AND document_type = 'invoice'
+```
+
+`meter_number` ist ein Datenpunkt, der aus der Rechnung extrahiert wird —
+nicht der Nachweis, dass eine Rechnung vorliegt. Eine Rechnung kann existieren,
+ohne dass `meter_number` bereits übertragen wurde.
+
+---
+
 ## profiles.email – Denormalisierung
 
 `profiles.email` ist eine Kopie aus `auth.users.email` und **nicht die Quelle der Wahrheit**.
