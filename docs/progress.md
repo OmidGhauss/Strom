@@ -126,6 +126,59 @@ Abgeschlossen: 2026-06-15
 
 ---
 
-## Block 5 und folgende
+## Block 4c: Korrekturen nach Codex Review ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000005_block4c_profiles_email_unique.sql`
+- [x] UNIQUE Constraint auf `profiles.email`
+- [x] `docs/database-decisions.md` aktualisiert: score/score_label API-Regel
+- [x] `docs/database-decisions.md` aktualisiert: product_type/energy_type API-Regel
+
+### Entscheidungen
+
+- `profiles.email UNIQUE` — konsistent mit `auth.users.email`, das in Supabase Auth
+  bereits UNIQUE ist
+- `score` und `score_label` werden nicht per DB gekoppelt — manuelle Overrides
+  durch Mitarbeiter müssen möglich bleiben; API pflegt beide Felder atomar
+- `product_type` und `energy_demands.energy_type` werden nicht per DB-Constraint
+  verknüpft — Komplexität nicht gerechtfertigt für V1; API ist verantwortlich
+
+---
+
+## Block 5: lead_status_history und lead_notes ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000006_block5_lead_status_history_lead_notes.sql`
+- [x] `lead_status_history` mit FK CASCADE (lead) und SET NULL (changed_by)
+- [x] `lead_notes` mit FK CASCADE (lead) und RESTRICT (created_by)
+- [x] Composite INDEX `(lead_id, created_at DESC)` auf beiden Tabellen
+- [x] Kein `updated_at` auf `lead_status_history` — Einträge sind unveränderlich
+- [x] `updated_at`-Trigger auf `lead_notes` via `trigger_set_updated_at()`
+
+### Entscheidungen
+
+- `lead_status_history` hat kein `updated_at` — Historieneinträge sind abgeschlossene
+  Tatsachen und dürfen nie verändert werden
+- `old_status` nullable — beim allerersten Statuswechsel (NULL → 'new') gibt es
+  keinen Vorgängerstatus
+- `changed_by` nullable — systemgenerierte Statuswechsel haben keinen menschlichen
+  Urheber; ON DELETE SET NULL erhält den Historieneintrag auch wenn die
+  Profil-Referenz verloren geht
+- `created_by` in `lead_notes` NOT NULL + RESTRICT — eine Notiz hat immer einen
+  Autor; Profil kann nicht entfernt werden solange Notizen existieren
+- Statusänderungen werden ausschließlich durch Anwendungscode erzeugt (kein
+  DB-Trigger), weil `changed_by` auf SQL-Ebene nicht verfügbar ist
+- `lead_notes` sind editierbar (Tippfehler, Ergänzungen); Einschränkung auf den
+  Autor ist RLS-Logik (Block 8)
+
+---
+
+## Block 6 und folgende
 
 Status: ausstehend

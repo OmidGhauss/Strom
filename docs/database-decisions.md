@@ -65,6 +65,69 @@ anfragt, hat `customer_type = 'business'` und `product_type = 'electricity'`.
 
 ---
 
+## score und score_label – keine DB-Kopplung
+
+`leads.score` (integer) und `leads.score_label` (enum) sind nicht per Datenbankconstraint
+aneinander gekoppelt. Die Konsistenz liegt in der Anwendungslogik.
+
+Entscheidung gegen DB-Kopplung:
+
+- `GENERATED ALWAYS AS` würde manuelle Overrides blockieren. Ein Mitarbeiter soll
+  einen Lead auf `'warm'` setzen können, auch wenn der berechnete Score noch bei 30
+  liegt (z. B. nach einem vielversprechenden Telefonat).
+- Ein `BEFORE UPDATE`-Trigger würde Threshold-Änderungen (z. B. `warm` ab 55 statt 50)
+  zu einer Migration machen statt zu einer Code-Änderung.
+
+API-Regel: Jeder Schreibzugriff auf `score` muss `score_label` atomar mitsetzen:
+
+| score     | score_label |
+|-----------|-------------|
+| 0 – 49    | `cold`      |
+| 50 – 79   | `warm`      |
+| 80 – 100  | `hot`       |
+
+Drift-Erkennung:
+```sql
+SELECT id, score, score_label FROM leads
+WHERE (score <  50 AND score_label != 'cold')
+   OR (score >= 50 AND score < 80 AND score_label != 'warm')
+   OR (score >= 80 AND score_label != 'hot');
+```
+
+---
+
+## product_type und energy_demands.energy_type – keine DB-Kopplung
+
+Die Konsistenzregeln zwischen `leads.product_type` und den zugehörigen
+`energy_demands`-Zeilen werden nicht per Datenbankconstraint erzwungen.
+Die Regeln gelten auf API-Ebene.
+
+API-Regeln beim Lead-Anlegen (innerhalb einer Transaktion):
+
+| `leads.product_type` | Zu erstellende `energy_demands`-Zeilen         |
+|----------------------|------------------------------------------------|
+| `electricity`        | genau eine Zeile mit `energy_type = 'electricity'` |
+| `gas`                | genau eine Zeile mit `energy_type = 'gas'`     |
+| `both`               | zwei Zeilen: `electricity` **und** `gas`       |
+
+Was die Datenbank trotzdem erzwingt (bereits implementiert):
+- `UNIQUE (lead_id, energy_type)` verhindert doppelte Zeilen desselben Typs
+- `energy_type` enum erlaubt nur `electricity` und `gas` — `'both'` ist dort unmöglich
+
+Drift-Erkennung:
+```sql
+SELECT l.id, l.product_type, COUNT(e.id) AS demand_count
+FROM leads l
+LEFT JOIN energy_demands e ON e.lead_id = l.id
+GROUP BY l.id, l.product_type
+HAVING
+  (l.product_type = 'electricity' AND COUNT(e.id) != 1) OR
+  (l.product_type = 'gas'         AND COUNT(e.id) != 1) OR
+  (l.product_type = 'both'        AND COUNT(e.id) != 2);
+```
+
+---
+
 ## ON DELETE CASCADE vs. RESTRICT
 
 `addresses` und `energy_demands` verwenden `ON DELETE CASCADE` auf `leads(id)`.
