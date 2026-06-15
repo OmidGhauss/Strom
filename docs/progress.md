@@ -282,8 +282,28 @@ Neue Dokumentationsdateien erstellt:
 - 5 SECURITY DEFINER Hilfsfunktionen geplant
 - `profiles`-Policies verwenden `auth.uid()` direkt (keine Hilfsfunktionen) um Zirkularität zu vermeiden
 
-### Implementierung
+### Implementierung ✓
 
-Status: ausstehend
+Abgeschlossen: 2026-06-15
 
-Migration: `supabase/migrations/20260615000010_block8_rls.sql` (noch nicht erstellt)
+Migration: `supabase/migrations/20260615000010_block8_rls.sql`
+
+### Erledigte Schritte
+
+- [x] 5 SECURITY DEFINER Hilfsfunktionen angelegt
+- [x] GRANT EXECUTE TO authenticated für alle Hilfsfunktionen
+- [x] RLS auf allen 9 CRM-Tabellen aktiviert
+- [x] 37 Policies gemäß Policy-Matrix angelegt
+
+### Entscheidungen
+
+- `profiles`-Policies verwenden `auth.uid()` direkt (keine Hilfsfunktionen)
+  um Zirkuläre Referenz zu vermeiden
+- `lead_notes` UPDATE/DELETE: `NOT is_manager_or_above()` stellt sicher,
+  dass ausschließlich Employees eigene Notizen bearbeiten können
+  (Manager-Einschränkung gemäß Policy-Matrix)
+- `documents` UPDATE: Manager darf alle zugänglichen Dokument-Metadaten
+  ändern; Spalten-Whitelist (keine storage_path, keine OCR-Felder für Manager)
+  liegt in der API Route
+- `lead_status_history`: kein UPDATE-Policy = kein UPDATE möglich
+- Storage: V1 Service Role only, keine Storage-Bucket-Policies → Block 8b

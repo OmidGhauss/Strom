@@ -191,6 +191,13 @@ sind ein DSGVO-Problem.
 
 ## 7. Documents Update Rules
 
+> **Hinweis RLS vs. API:** Die RLS-Policy für `documents` UPDATE ist bewusst
+> etwas breiter formuliert als die tatsächlich erlaubten Feldänderungen.
+> RLS kann nur prüfen *ob* eine Zeile aktualisiert werden darf, nicht *welche Felder*.
+> Jede API Route, die ein Document-UPDATE exponiert, **muss** die Payload
+> strikt per Feld-Whitelist filtern. Ohne diese Whitelist darf kein
+> Document-UPDATE-Endpoint veröffentlicht werden.
+
 ### Felder, die nie per normaler API geändert werden dürfen
 
 Unabhängig von der Rolle — diese Felder sind nach dem INSERT unveränderlich:
@@ -244,11 +251,12 @@ Nur der **Autor** (`created_by = current_profile_id()`) oder ein **Admin**
 darf eine Notiz bearbeiten oder löschen.
 
 **Manager darf lead_notes weder updaten noch löschen** — auch nicht für Leads,
-auf die der Manager Zugriff hat.
+auf die der Manager Zugriff hat, und auch nicht eigene Notizen.
 
-Begründung: Notizen sind persönliche Arbeitsaufzeichnungen des Autors.
-Ein Manager soll Notizen lesen können, aber nicht in fremde Aufzeichnungen
-eingreifen. Admin hat das Recht für DSGVO-Löschungen und Korrektur.
+Begründung: Notizen gelten als persönliche Arbeitsaufzeichnungen des Autors.
+Nur der Autor selbst oder ein Admin darf Notizen ändern oder entfernen.
+Diese Einschränkung ist bewusst — ein Manager soll Notizen lesen, aber nicht
+in Aufzeichnungen anderer eingreifen können.
 
 Die API Route prüft vor jedem PATCH/DELETE auf `lead_notes`:
 - Ist der User Admin → erlaubt

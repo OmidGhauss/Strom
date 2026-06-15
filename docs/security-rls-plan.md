@@ -170,6 +170,11 @@ Unveränderlich — kein UPDATE für niemanden.
 
 Employee kann eigene Notizen bearbeiten und löschen.
 
+**Manager dürfen lead_notes bewusst nicht updaten oder löschen** — auch nicht
+eigene Notizen. Notizen gelten als persönliche Arbeitsaufzeichnungen des Autors.
+Nur der Autor selbst (Employee) oder ein Admin darf Notizen ändern oder entfernen.
+Diese Einschränkung ist in der RLS-Policy über `NOT is_manager_or_above()` umgesetzt.
+
 ### documents
 
 | Operation | employee | manager | admin |
