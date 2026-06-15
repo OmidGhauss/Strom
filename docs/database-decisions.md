@@ -65,6 +65,74 @@ anfragt, hat `customer_type = 'business'` und `product_type = 'electricity'`.
 
 ---
 
+## Angebotsversionierung (offers)
+
+`offer_status = 'superseded'` bedeutet: Dieses Angebot wurde durch eine neue Version
+ersetzt und ist nicht mehr gültig.
+
+Regeln:
+
+- Ein `superseded`-Angebot darf **nicht mehr vom Kunden akzeptiert werden**.
+  Die API muss jeden Versuch, `status = 'accepted'` auf ein `superseded`-Angebot
+  zu setzen, mit einem Fehler ablehnen.
+- Wenn eine neue Angebotsversion erstellt wird, setzt die API das Vorgängerangebot
+  automatisch auf `status = 'superseded'`.
+- `offers.parent_offer_id` zeigt auf das direkte Vorgängerangebot.
+
+**Versionsketten-Zyklen** (A → B → A) müssen durch die API verhindert werden.
+Kein Datenbankconstraint kann Zyklen in selbstreferenziellen FKs blockieren.
+Die API prüft vor dem Setzen von `parent_offer_id`, ob das referenzierte Angebot
+bereits Teil einer bestehenden Kette ist.
+
+---
+
+## Angebotsstatus – aktiv vs. nicht aktiv
+
+Für Reporting und Dashboard-Filterung gilt diese Klassifizierung:
+
+| Gruppe | Statuswerte |
+|--------|-------------|
+| Aktiv | `draft`, `sent` |
+| Nicht aktiv | `accepted`, `rejected`, `expired`, `superseded` |
+
+Aktive Angebote = Angebote, bei denen noch eine Kundenreaktion aussteht oder die
+noch nicht versendet wurden. Nicht aktive Angebote sind abgeschlossen.
+
+---
+
+## Energy-Type-Konsistenz (offers)
+
+Wenn `offers.energy_demand_id` gesetzt ist, muss `offers.energy_type` mit
+`energy_demands.energy_type` der referenzierten Zeile übereinstimmen.
+
+Diese Regel wird **in der API validiert**, nicht per DB-Constraint. Ein
+Datenbankconstraint würde eine Cross-Table-Prüfung erfordern (CHECK über JOIN),
+was in PostgreSQL nicht direkt möglich ist.
+
+Drift-Erkennung:
+```sql
+SELECT o.id, o.energy_type, e.energy_type AS demand_energy_type
+FROM offers o
+JOIN energy_demands e ON e.id = o.energy_demand_id
+WHERE o.energy_demand_id IS NOT NULL
+  AND o.energy_type != e.energy_type;
+```
+
+---
+
+## Communication Direction – Semantik
+
+| Wert | Bedeutung |
+|------|-----------|
+| `inbound` | Kunde oder externe Partei nimmt Kontakt mit der Firma auf |
+| `outbound` | Firma nimmt Kontakt mit Kunde oder externer Partei auf |
+| `internal` | Systemereignis oder technisch-interne Kommunikation (kein Mensch auf einer Seite) |
+
+`internal` wird für automatische Systemeinträge verwendet:
+z. B. "Angebot wurde automatisch generiert", "Status wurde per Webhook aktualisiert".
+
+---
+
 ## documents – was sich ändern darf und was nicht
 
 **Die Datei in Supabase Storage ist unveränderlich.** Ein hochgeladenes Dokument wird

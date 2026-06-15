@@ -229,6 +229,61 @@ Die Datei in Supabase Storage bleibt unveränderlich. Die Datenbankmetadaten
 
 ---
 
-## Block 7 und folgende
+## Block 7: offers und communications_log ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000009_block7_offers_communications_log.sql`
+- [x] Enum `offer_status`: `draft`, `sent`, `accepted`, `rejected`, `expired`, `superseded`
+- [x] Enum `communication_type`: `email`, `call`, `sms`, `system`
+- [x] Enum `communication_direction`: `inbound`, `outbound`, `internal`
+- [x] Enum `communication_status`: `pending`, `success`, `failed`
+- [x] Sequence `offer_number_seq` (START 1000, Format AN-YYYY-NNNNN)
+- [x] `offers`-Tabelle mit offer_number DEFAULT-Expression
+- [x] `offers`: FK CASCADE (lead), SET NULL (energy_demand, created_by, parent_offer, pdf_document)
+- [x] `offers`: Composite INDEX `(lead_id, status)`, UNIQUE `offer_number`
+- [x] `offers`: `updated_at`-Trigger
+- [x] `communications_log`-Tabelle mit `offer_id` und `external_id`
+- [x] `communications_log`: FK CASCADE (lead), SET NULL (offer, created_by)
+- [x] `communications_log`: INDEX `(lead_id, created_at DESC)`, `updated_at`-Trigger
+- [x] `docs/database-decisions.md` aktualisiert: Versionierung, Reporting, Energy-Type-Konsistenz, Direction-Semantik
+
+### Entscheidungen
+
+- `offer_status` ohne `created` — `draft` deckt diesen Zustand bereits ab
+- `communication_type` ohne `note` — interne Notizen gehören in `lead_notes`
+- `updated_at` auf `communications_log` — Status-Updates via Webhooks (Resend Delivery) erfordern Updates
+- `offer_id` in `communications_log` — sofort nützlich für "Angebot X per E-Mail versendet"
+- Versionsketten-Zyklen werden durch API verhindert (kein DB-Constraint möglich)
+- `superseded`-Angebote dürfen nicht mehr akzeptiert werden (API-Validierung)
+
+---
+
+## Block 8: Row Level Security
+
+### Planung abgeschlossen: 2026-06-15
+
+Neue Dokumentationsdateien erstellt:
+
+- [x] `docs/security-rls-plan.md` — vollständige RLS-Architektur
+- [x] `docs/api-validation-rules.md` — Businessregeln, die die API erzwingen muss
+
+### Planentscheidungen
+
+- `profiles` UPDATE: admin-only — Employees dürfen ihr Profil nicht direkt updaten
+- `leads` INSERT employee: WITH CHECK `assigned_to = current_profile_id()`
+- Manager/Admin: Leads frei anlegen und zuweisen
+- DELETE: ausschließlich admin auf allen Tabellen (außer eigene lead_notes)
+- `lead_status_history` UPDATE: niemand — unveränderlich
+- Storage V1: private bucket, Zugriff nur über API Routes und signed URLs
+- Keine Storage-Bucket-Policies in Block 8 → Block 8b
+- 5 SECURITY DEFINER Hilfsfunktionen geplant
+- `profiles`-Policies verwenden `auth.uid()` direkt (keine Hilfsfunktionen) um Zirkularität zu vermeiden
+
+### Implementierung
 
 Status: ausstehend
+
+Migration: `supabase/migrations/20260615000010_block8_rls.sql` (noch nicht erstellt)
