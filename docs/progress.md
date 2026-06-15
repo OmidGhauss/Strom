@@ -307,3 +307,79 @@ Migration: `supabase/migrations/20260615000010_block8_rls.sql`
   liegt in der API Route
 - `lead_status_history`: kein UPDATE-Policy = kein UPDATE möglich
 - Storage: V1 Service Role only, keine Storage-Bucket-Policies → Block 8b
+
+---
+
+## Block 9: Backend/API Foundation ✓
+
+Abgeschlossen: 2026-06-15
+
+### Next.js 16 Breaking Change (aus Docs-Prüfung)
+
+- `middleware.ts` ist in Next.js 16 **deprecated** und heißt jetzt `proxy.ts`
+- Die exportierte Funktion heißt `proxy` (nicht `middleware`)
+- Dynamic-Route `params` ist eine Promise und muss mit `await params` gelesen werden
+- `cookies()` aus `next/headers` ist async (bereits in Block 1 korrekt implementiert)
+
+### Erledigte Schritte
+
+- [x] `server-only` Package installiert (Build-Zeit-Absicherung für Admin-Client)
+- [x] Ordnerstruktur für alle geplanten API Routes angelegt (`src/app/api/`)
+- [x] `src/lib/supabase/admin.ts` — Service Role Client mit `server-only` Guard
+- [x] `src/lib/api/errors.ts` — Error-Response-Helfer, Supabase-Error-Mapping
+- [x] `src/lib/api/responses.ts` — `singleResponse`, `listResponse`, `noContentResponse`
+- [x] `src/lib/api/auth.ts` — `requireAuth()` Helfer (gibt `profileId`, `role`, `authUserId`)
+- [x] `src/lib/api/guards.ts` — alle Business Guards aus `docs/api-validation-rules.md`
+- [x] `src/lib/validation/common.ts` — UUID-Schema, Pagination-Schema, Pagination-Helfer
+- [x] `src/types/database.ts` — manuelle DB-Typen für alle 9 Tabellen + `Database`-Typ
+- [x] `proxy.ts` (Projektroot) — Auth-Check für `/api/*` außer `/api/public/*`
+- [x] `src/app/api/leads/route.ts` — `GET /api/leads` mit Auth, RLS, Pagination
+
+### Korrekturen nach Codex Review (Block 9b)
+
+- [x] `src/types/database.ts`: `LeadStatus` korrigiert — entspricht jetzt exakt dem DB-Enum aus der Migration
+  (alte Werte wie `contacted`, `won`, `callback_requested` entfernt; korrekte Werte: `in_review`, `offer_created`, `contract_prepared` etc.)
+- [x] `src/lib/api/auth.ts`: `import "server-only"` ergänzt
+- [x] `.env.local.example`: `SUPABASE_SERVICE_ROLE_KEY=` mit Sicherheitshinweis ergänzt
+- [x] `src/lib/api/errors.ts`: `console.error` in `handleSupabaseError` ergänzt (serverseitige Protokollierung ohne DB-Details an Client)
+
+### Entscheidungen
+
+- `middleware.ts` wurde **nicht** angelegt — Next.js 16 verwendet `proxy.ts` (Breaking Change)
+- `proxy.ts` lädt Session via `@supabase/ssr` mit `request.cookies.getAll()` (nicht `next/headers`)
+- `requireAuth()` in `auth.ts` ist die zweite Sicherheitsschicht im Route Handler (Proxy allein reicht nicht)
+- Service Role Client (`admin.ts`) ist in Block 9 angelegt, aber für keinen Endpoint verwendet
+- Zod v4 war bereits als transitive Dependency installiert (kein explizites `npm install` nötig)
+- `database.ts` ist manuell gepflegt; wird durch `supabase gen types typescript` ersetzt sobald ein verbundenes Supabase-Projekt verfügbar ist
+
+### Nicht in Block 9 (bewusst ausgelassen)
+
+- `POST /api/public/leads` → nach Affiliate-V1-Datenblock (Multi-Table atomar via RPC)
+- Alle weiteren Write-Endpoints (P1–P5) → Block 10+
+- Lead-DELETE DSGVO-Prozess → Block 10
+- Rate Limiting / Captcha → Pflicht vor Go-Live des Public Lead Submit
+- Tests → als TODO dokumentiert, eigener Block
+
+### TODOs (für spätere Blocks)
+
+- [ ] RLS-Tests: Employee sieht nur eigene Leads, kein Kreuz-Lesezugriff
+- [ ] API-Integration-Tests: `GET /api/leads` mit verschiedenen Rollen
+- [ ] Guards-Unit-Tests: `computeScoreLabel`, `assertEmployeeCannotChangeAssignedTo` etc.
+- [ ] Public Form E2E: erst wenn `POST /api/public/leads` existiert
+- [ ] `supabase gen types typescript` → `src/types/database.ts` ersetzen
+
+### Geplante Folge-Blocks
+
+```
+Block 9:  API Foundation + GET /api/leads             ✓
+    ↓
+Block ?:  Affiliate-V1-Datenblock (Tabellen, Migrationen)
+    ↓
+Block ?:  Public Lead Submit – POST /api/public/leads
+          mit atomarem Lead + energy_demands + lead_referrals via RPC
+          + Rate Limiting / Captcha (Pflicht)
+    ↓
+Block ?:  Weitere interne CRM-Endpoints (P1–P5)
+    ↓
+Block ?:  Tests (RLS, API, E2E)
+```
