@@ -70,6 +70,34 @@ trägt die Segmentinformation alleine.
 
 ---
 
-## Block 3 und folgende
+## Block 3: leads-Tabelle ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000003_block3_leads.sql`
+- [x] Enum `lead_score_label` angelegt: `cold`, `warm`, `hot`
+- [x] Sequence `lead_number_seq` angelegt (START 1000)
+- [x] `leads`-Tabelle mit allen Feldern gemäß finalem Plan
+- [x] `lead_number` per DEFAULT-Expression erzeugt (kein Trigger nötig)
+- [x] FK `assigned_to → profiles(id) ON DELETE SET NULL`
+- [x] CHECK-Constraint `score >= 0 AND score <= 100`
+- [x] Trigger `set_leads_updated_at` für `updated_at`
+- [x] 4 Indizes angelegt (UNIQUE lead_number, status, assigned_to, created_at DESC)
+
+### Entscheidungen
+
+- `first_name`, `last_name`, `email` sind NOT NULL — ohne diese Felder ist ein Lead nicht arbeitsfähig
+- `phone` ist nullable — E-Mail ist der Mindest-Kontaktkanal
+- `privacy_consent` und `contact_consent` haben keinen Default — müssen explizit gesetzt werden
+- UTM-Felder direkt in `leads` (1:1-Beziehung, kein Multi-Touch in V1)
+- `lead_number` via Sequence + DEFAULT-Expression (kein Trigger)
+- `score_label` als eigener Enum `lead_score_label` (konsistent mit anderen Enums)
+- Indizes für `product_type`, `customer_type` und `(status, assigned_to)` werden erst bei nachgewiesenen Abfrageanforderungen ergänzt
+
+---
+
+## Block 4 und folgende
 
 Status: ausstehend
