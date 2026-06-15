@@ -65,6 +65,53 @@ anfragt, hat `customer_type = 'business'` und `product_type = 'electricity'`.
 
 ---
 
+## documents – was sich ändern darf und was nicht
+
+**Die Datei in Supabase Storage ist unveränderlich.** Ein hochgeladenes Dokument wird
+nie ersetzt oder überschrieben — dafür gibt es keinen Mechanismus. Die Datei bleibt
+nach dem Upload unverändert in Storage.
+
+**Die Datenbankmetadaten sind editierbar.** Folgende Felder dürfen nach dem ersten
+INSERT aktualisiert werden:
+
+- `ocr_status`, `ocr_text`, `ocr_processed_at` — durch den asynchronen OCR-Worker
+- `document_type` — manuelle Korrektur durch Mitarbeiter (z. B. `'other'` → `'invoice'`)
+
+`updated_at` verfolgt, wann Metadaten zuletzt geändert wurden — nicht wann die Datei
+geändert wurde (das passiert nie).
+
+---
+
+## Storage-Datei und DB-Eintrag sind entkoppelt
+
+Die `documents`-Tabelle speichert nur Metadaten. Die Datei liegt in Supabase Storage.
+
+**Supabase Storage löscht Dateien nicht automatisch**, wenn ein Datenbankeintrag entfernt
+wird — auch nicht via `ON DELETE CASCADE`.
+
+Konsequenz: Wenn ein Lead gelöscht wird (z. B. DSGVO-Löschung), müssen **zuerst**
+alle zugehörigen Storage-Dateien durch Anwendungscode entfernt werden:
+
+```typescript
+// 1. Storage-Dateien löschen
+const { data: docs } = await supabase
+  .from('documents')
+  .select('storage_path, storage_bucket')
+  .eq('lead_id', leadId)
+
+for (const doc of docs) {
+  await supabase.storage.from(doc.storage_bucket).remove([doc.storage_path])
+}
+
+// 2. Erst danach den Lead löschen (CASCADE entfernt DB-Einträge)
+await supabase.from('leads').delete().eq('id', leadId)
+```
+
+Wenn die Reihenfolge umgekehrt wird (Lead zuerst löschen), sind die Storage-Dateien
+dauerhaft verwaist und nicht mehr referenzierbar — DSGVO-Problem.
+
+---
+
 ## score und score_label – keine DB-Kopplung
 
 `leads.score` (integer) und `leads.score_label` (enum) sind nicht per Datenbankconstraint

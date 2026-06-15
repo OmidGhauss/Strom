@@ -179,6 +179,56 @@ Abgeschlossen: 2026-06-15
 
 ---
 
-## Block 6 und folgende
+## Block 6: Dokumentenmanagement ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000007_block6_documents.sql`
+- [x] Enum `document_type` angelegt: `invoice`, `offer_pdf`, `contract_pdf`,
+  `cancellation_confirmation`, `power_of_attorney`, `other`
+- [x] `documents`-Tabelle mit allen Feldern
+- [x] FK `lead_id → leads(id) ON DELETE CASCADE`
+- [x] FK `uploaded_by → profiles(id) ON DELETE SET NULL`
+- [x] UNIQUE `storage_path`
+- [x] Composite INDEX `(lead_id, document_type)`
+- [x] OCR-Felder als nullable Vorbereitung (`ocr_status`, `ocr_text`, `ocr_processed_at`)
+- [x] `docs/database-decisions.md` aktualisiert: Storage/DB-Entkopplung dokumentiert
+
+### Entscheidungen
+
+- Kein `updated_at` — Dokumente sind unveränderliche Einträge; Korrekturen
+  erfolgen durch Löschen und Neu-Hochladen
+- `storage_bucket` als eigene Spalte — entkoppelt physische Storage-Struktur
+  von der Datenbanklogik; DEFAULT `'documents'`
+- `uploaded_by` nullable — systemgenerierte Dokumente haben keinen menschlichen Uploader
+- OCR-Felder in V1 immer NULL — Vorbereitung ohne Implementierung
+- Storage-Datei muss vor Lead-Löschung per Anwendungscode entfernt werden
+  (CASCADE löscht nur den DB-Eintrag, nicht die Datei in Storage)
+
+---
+
+## Block 6b: documents updated_at Korrektur ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000008_block6b_documents_updated_at.sql`
+- [x] `documents.updated_at timestamptz NOT NULL DEFAULT now()` ergänzt
+- [x] Trigger `set_documents_updated_at` via `trigger_set_updated_at()` angelegt
+- [x] `docs/database-decisions.md` aktualisiert: Datei unverändert, Metadaten editierbar
+
+### Entscheidung
+
+Die ursprüngliche Aussage "Dokumente sind unveränderlich" war zu weit gefasst.
+Die Datei in Supabase Storage bleibt unveränderlich. Die Datenbankmetadaten
+(OCR-Felder, document_type-Korrekturen) dürfen aktualisiert werden.
+`updated_at` verfolgt ausschließlich Metadaten-Änderungen.
+
+---
+
+## Block 7 und folgende
 
 Status: ausstehend
