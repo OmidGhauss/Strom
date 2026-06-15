@@ -42,25 +42,26 @@ Diese Felder beschreiben zwei orthogonale Dimensionen eines Leads:
 
 **product_type** – Welche Energieart wird angefragt?
 
-| Wert          | Bedeutung                                    |
-|---------------|----------------------------------------------|
-| `electricity` | Nur Strom                                    |
-| `gas`         | Nur Gas                                      |
-| `both`        | Strom und Gas in einem Auftrag               |
-| `business`    | Geschäftstarif (Energie-Art noch offen)      |
+| Wert          | Bedeutung                      |
+|---------------|--------------------------------|
+| `electricity` | Nur Strom                      |
+| `gas`         | Nur Gas                        |
+| `both`        | Strom und Gas in einem Auftrag |
+
+`'business'` existiert **nicht** in `product_type`. Kundensegmente (Gewerbe,
+Hausverwaltung usw.) sind ausschließlich Aufgabe von `customer_type`.
 
 **customer_type** – Welcher Kundentyp ist der Lead?
 
-| Wert                    | Bedeutung                              |
-|-------------------------|----------------------------------------|
-| `private`               | Privatperson                           |
-| `business`              | Gewerbliches Unternehmen               |
-| `property_management`   | Hausverwaltung                         |
-| `multi_location_company`| Unternehmen mit mehreren Standorten    |
+| Wert                     | Bedeutung                               |
+|--------------------------|-----------------------------------------|
+| `private`                | Privatperson                            |
+| `business`               | Gewerbliches Unternehmen                |
+| `property_management`    | Hausverwaltung                          |
+| `multi_location_company` | Unternehmen mit mehreren Standorten     |
 
-Beide Felder zusammen steuern Bearbeitungslogik und Lead-Scoring.
-`product_type = 'business'` ist kein Synonym für `customer_type = 'business'` –
-ersteres beschreibt die angebotene Produktkategorie, letzteres den Kundentyp.
+Beide Felder beschreiben orthogonale Dimensionen. Ein Gewerbekunde, der Strom
+anfragt, hat `customer_type = 'business'` und `product_type = 'electricity'`.
 
 ---
 

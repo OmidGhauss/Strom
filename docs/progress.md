@@ -51,6 +51,25 @@ Abgeschlossen: 2026-06-15
 
 ---
 
+## Block 2b: product_type Enum Korrektur ✓
+
+Abgeschlossen: 2026-06-15
+
+### Erledigte Schritte
+
+- [x] Migration erstellt: `supabase/migrations/20260615000002_block2b_fix_product_type_enum.sql`
+- [x] `product_type` Enum neu erstellt ohne `'business'` (DROP + Recreate)
+- [x] `docs/database-decisions.md` aktualisiert
+- [x] `docs/backend-database-plan.md` aktualisiert (Abschnitt 6.2)
+
+### Entscheidung
+
+`'business'` gehört nicht in `product_type`. Energieart (Strom/Gas/beides) und
+Kundensegment (Privat/Gewerbe) sind orthogonale Dimensionen. `customer_type`
+trägt die Segmentinformation alleine.
+
+---
+
 ## Block 3 und folgende
 
 Status: ausstehend

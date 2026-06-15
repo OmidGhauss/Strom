@@ -280,7 +280,6 @@ Product Types:
 electricity
 gas
 both
-business
 ```
 
 Customer Types:
