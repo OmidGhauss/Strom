@@ -440,3 +440,31 @@ Erster Schritt von Block 10 (Public Lead Submit). Keine SQL-Migration, keine API
 
 - `npx tsc --noEmit` — 0 Fehler, 0 Warnungen
 - Keine anderen Quelldateien referenzieren die umbenannten Felder (`content`, `zip_code`)
+
+---
+
+## Block 10b: RPC submit_public_lead() ✓
+
+Abgeschlossen: 2026-06-16
+
+Planungsdokument: `docs/block10b-rpc-plan.md`
+Migration: `supabase/migrations/20260615000012_block10b_submit_public_lead_rpc.sql`
+
+### Erledigte Schritte
+
+- [x] Funktion `submit_public_lead()` erstellt — `LANGUAGE plpgsql`, `SECURITY DEFINER`, `SET search_path = pg_catalog, public, pg_temp`
+- [x] 3 Guards implementiert: `CONSENT_REQUIRED`, `ENERGY_DEMANDS_REQUIRED`, `ENERGY_DEMANDS_PRODUCT_TYPE_MISMATCH`
+- [x] 5 atomare Writes: `leads` → `addresses` (opt.) → `energy_demands` → `lead_referrals` (opt.) → `lead_status_history`
+- [x] `lead_status_history`: `old_status = NULL`, `new_status = 'new'`, `reason = 'public_lead_submit'`
+- [x] referral_code Lookup innerhalb der RPC — silent fail bei ungültigem/inaktivem Code
+- [x] `REVOKE EXECUTE FROM PUBLIC, anon, authenticated`
+- [x] `GRANT EXECUTE TO service_role`
+- [x] `npx tsc --noEmit` — 0 Fehler
+
+### Entscheidungen
+
+- Guard 3 zählt nach `energy_type`-Wert (nicht nach Array-Position) — Reihenfolge der Elemente ist irrelevant
+- `assigned_to = NULL` hardcoded — öffentliche Leads starten immer unassigned
+- `score = 0`, `score_label = 'cold'`, `status = 'new'` explizit gesetzt (DEFAULTs vorhanden, aber explizit für Klarheit)
+- `country` fällt auf `'DE'` zurück wenn nicht im `p_address`-Objekt angegeben
+- Keine Validierung innerhalb der RPC für Felder, die DB-Constraints (NOT NULL, CHECK, UNIQUE) oder API-Schicht (Zod) bereits abdecken
