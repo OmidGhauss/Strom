@@ -344,6 +344,15 @@ export type Database = {
         Args: Record<string, unknown>;
         Returns: { lead_id: string; lead_number: string };
       };
+      change_lead_status: {
+        Args: {
+          p_lead_id: string;
+          p_new_status: string;
+          p_changed_by: string;
+          p_reason?: string | null;
+        };
+        Returns: Array<{ lead_id: string; old_status: string; new_status: string }>;
+      };
     };
     Enums: {
       user_role: UserRole;

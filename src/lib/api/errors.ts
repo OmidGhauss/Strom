@@ -42,6 +42,7 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
 
   switch (error.code) {
     case "P0001": // RAISE EXCEPTION mit custom ERRCODE
+      if (error.message === "LEAD_NOT_FOUND") return ApiErrors.notFound("Lead");
       if (error.message === "CONSENT_REQUIRED") {
         return ApiErrors.unprocessable("Einwilligung erforderlich");
       }

@@ -512,3 +512,79 @@ Planungsdokument: `docs/block10c-api-plan.md`
 - P0001 in `handleSupabaseError()` mappt auf `error.message` → 3 verschiedene 422-Meldungen
 - 23514 (CHECK-Verletzung) und 22P02 (ungültiger Enum-Cast) → 422 (neu)
 - `npx tsc --noEmit` — 0 Fehler
+
+---
+
+## Block 11: Interne CRM Lead APIs ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-11-Architekturplan Rev. 3
+
+### Neue Migration
+
+- [x] `supabase/migrations/20260617000001_block11_change_lead_status_rpc.sql`
+  - RPC `change_lead_status(p_lead_id, p_new_status, p_changed_by, p_reason?)` — SECURITY INVOKER
+  - Atomar: UPDATE leads.status + INSERT lead_status_history in einer Transaktion
+  - P0001 LEAD_NOT_FOUND als Sicherheitsnetz
+  - REVOKE FROM PUBLIC, anon, authenticated / GRANT TO service_role
+
+### Neue Dateien (7)
+
+- [x] `src/lib/validation/lead.ts` — UpdateLeadSchema, UpdateLeadStatusSchema, LEAD_STATUS_VALUES
+- [x] `src/app/api/leads/[id]/route.ts` — GET + PATCH
+- [x] `src/app/api/leads/[id]/status/route.ts` — PATCH (mit RLS-Gate + No-op Guard)
+- [x] `src/app/api/leads/[id]/status-history/route.ts` — GET (paginiert)
+- [x] `src/app/api/leads/[id]/addresses/route.ts` — GET
+- [x] `src/app/api/leads/[id]/energy-demands/route.ts` — GET
+- [x] `src/app/api/leads/[id]/referral/route.ts` — GET (rollenbasiertes Branching)
+
+### Geänderte Dateien (3)
+
+- [x] `src/lib/api/guards.ts` — assertStatusTransitionAllowedForRole hinzugefügt
+- [x] `src/lib/api/errors.ts` — P0001 LEAD_NOT_FOUND → 404 ergänzt
+- [x] `src/types/database.ts` — change_lead_status in Functions ergänzt
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| GET | /api/leads/[id] | Lead-Detail inkl. addresses[] + energy_demands[] (embedded) |
+| PATCH | /api/leads/[id] | Stammdaten (Whitelist, ohne product_type) |
+| PATCH | /api/leads/[id]/status | Statuswechsel atomar via RPC |
+| GET | /api/leads/[id]/status-history | Statushistorie paginiert |
+| GET | /api/leads/[id]/addresses | Alle Adressen (max. 3) |
+| GET | /api/leads/[id]/energy-demands | Alle Energiebedarfe (max. 2) |
+| GET | /api/leads/[id]/referral | Referral-Info (rollenabhängig) |
+
+### Sicherheitslogik
+
+- `requireAuth()` als erster Schritt in jedem Handler
+- UUID-Validierung des `id`-Params vor DB-Zugriff → 404 bei ungültiger UUID
+- User-aware Client (`createClient()`) für alle `.from()` Queries — RLS wirkt
+- `adminClient.rpc("change_lead_status")` wird **ausschließlich** nach positivem RLS-Gate aufgerufen
+- No-op Guard: body.status === currentStatus → früher Return, kein RPC, kein History-Eintrag
+- Employee → terminale Statuse (completed/rejected/disqualified/lost) → 403 via assertStatusTransitionAllowedForRole
+- Employee → assigned_to → 403 via assertEmployeeCannotChangeAssignedTo
+- product_type nicht in UpdateLeadSchema (nur atomar mit energy_demands änderbar, späterer Block)
+- Referral-Endpoint: rollenbasiertes Branching — Employee sieht is_referral only, Manager/Admin sehen Affiliate-Daten
+
+### Entscheidungen
+
+- SECURITY INVOKER explizit im RPC — kein SECURITY DEFINER (service_role bypassed RLS ohnehin)
+- changed_by = profileId aus requireAuth(), nie aus dem Request-Body
+- No-op Statuswechsel: 200 mit changed: false, kein History-Eintrag
+- GET /api/leads/[id]: RLS + PGRST116 → 404 — kein Info-Leak ob Lead existiert
+- Referral FK-Hint-Syntax: affiliate_links!affiliate_link_id(...) für deterministischen Join
+- Adressen/Energy-Demands ohne Pagination (max. 3/2 Zeilen)
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+### Nicht in Block 11 (bewusst ausgelassen)
+
+- product_type: isolierte Änderung ausgeschlossen — atomar mit energy_demands in späterem Block
+- Notes-CRUD → Block 13
+- Adress-/Energiebedarf-Bearbeitung → Block 12
+- Lead-Löschung, Offers, Communications, Documents, E-Mail-Automationen → spätere Blöcke

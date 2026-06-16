@@ -120,6 +120,21 @@ export function assertOfferNotSuperseded(
   }
 }
 
+// Section 9 (Block 11): Terminale Statuse dürfen nur von Manager/Admin gesetzt werden.
+const MANAGER_ONLY_STATUSES = ["completed", "rejected", "disqualified", "lost"] as const;
+
+export function assertStatusTransitionAllowedForRole(
+  role: UserRole,
+  newStatus: string
+): void {
+  if (
+    role === "employee" &&
+    (MANAGER_ONLY_STATUSES as readonly string[]).includes(newStatus)
+  ) {
+    throw ApiErrors.forbidden(`Employee darf Status '${newStatus}' nicht setzen`);
+  }
+}
+
 // Section 1: Employee-eigenes Profil: nur full_name erlaubt.
 const EMPLOYEE_PROFILE_WHITELIST = ["full_name"] as const;
 
