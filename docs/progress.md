@@ -588,3 +588,55 @@ Plan: Block-11-Architekturplan Rev. 3
 - Notes-CRUD → Block 13
 - Adress-/Energiebedarf-Bearbeitung → Block 12
 - Lead-Löschung, Offers, Communications, Documents, E-Mail-Automationen → spätere Blöcke
+
+---
+
+## Block 12: Address & Energy Demand Management ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-12-Architekturplan Rev. 2 + Ergänzungen (Race Case, EnergyDemand 404)
+
+### Neue Dateien (2)
+
+- [x] `src/app/api/leads/[id]/addresses/[addressType]/route.ts` — PATCH (try-UPDATE-then-INSERT)
+- [x] `src/app/api/leads/[id]/energy-demands/[energyType]/route.ts` — PATCH (UPDATE-only)
+
+### Geänderte Dateien (1)
+
+- [x] `src/lib/validation/lead.ts` — AddressTypeSchema, UpdateAddressSchema, EnergyTypeSchema, UpdateEnergyDemandSchema ergänzt
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| PATCH | /api/leads/[id]/addresses/[addressType] | Adresse anlegen oder partiell updaten |
+| PATCH | /api/leads/[id]/energy-demands/[energyType] | Energiebedarf partiell updaten |
+
+### Sicherheitslogik
+
+- `requireAuth()` als erster Schritt
+- UUID-Validierung + addressType/energyType Enum-Validierung vor DB-Zugriff
+- User-aware Client für alle Queries — kein adminClient in Block 12
+- RLS: addresses INSERT + UPDATE = `can_access_lead(lead_id)`
+- RLS: energy_demands UPDATE = `can_access_lead(lead_id)`
+- Unberechtigte Zugriffe: PGRST116 → 404 (kein Info-Leak)
+
+### Entscheidungen
+
+- **Echter PATCH für addresses:** try-UPDATE-then-INSERT statt `.upsert()` — `.upsert()` würde omitted fields auf NULL überschreiben
+- **UPDATE-only für energy_demands:** kein Upsert — Anlegen von energy_demands nur via product_type-Endpoint (Block 12b), damit Konsistenz mit `leads.product_type` gewahrt bleibt
+- `hot_water_with_gas` bei `energyType = "electricity"` → 422 (DB-CHECK vorab geprüft)
+- TOCTOU beim Address-INSERT: 23505 unique_violation → 409 via `handleSupabaseError` (bereits gemappt), kein automatischer Retry in V1
+- PGRST116 bei energy_demands UPDATE: explizit vor `handleSupabaseError` → `ApiErrors.notFound("EnergyDemand")`
+
+### Nicht in Block 12 (bewusst ausgelassen)
+
+- `PATCH /api/leads/[id]/product-type` → Block 12b (atomarer product_type + energy_demands Wechsel, Konfliktregeln bei bestehenden Offers noch offen)
+- `DELETE /api/leads/[id]/addresses/[addressType]` → späterer Block
+- `DELETE /api/leads/[id]/energy-demands/[energyType]` → späterer Block
+- Notes, Documents, Offers, Communications, E-Mail-Automationen → spätere Blöcke
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler

@@ -43,3 +43,45 @@ export const UpdateLeadStatusSchema = z.object({
 });
 
 export type UpdateLeadStatusInput = z.infer<typeof UpdateLeadStatusSchema>;
+
+// Für PATCH /api/leads/[id]/addresses/[addressType]
+export const AddressTypeSchema = z.enum(["delivery", "billing", "contact"]);
+
+// Alle Felder optional — echte PATCH-Semantik: omitted = unveränderlich.
+// Felder ohne .nullable(): wenn angegeben, muss ein Non-Null-String kommen.
+// Felder mit .nullable(): können explizit auf null gesetzt werden (Wert löschen).
+export const UpdateAddressSchema = z.object({
+  street:           z.string().min(1).max(500).optional(),
+  house_number:     z.string().max(50).nullable().optional(),
+  address_addition: z.string().max(200).nullable().optional(),
+  postal_code:      z.string().min(1).max(20).optional(),
+  city:             z.string().min(1).max(200).optional(),
+  state:            z.string().max(200).nullable().optional(),
+  country:          z.string().min(1).max(10).optional(),
+});
+
+export type UpdateAddressInput = z.infer<typeof UpdateAddressSchema>;
+
+// Für PATCH /api/leads/[id]/energy-demands/[energyType]
+export const EnergyTypeSchema = z.enum(["electricity", "gas"]);
+
+// hot_water_with_gas: DB-CHECK (nur gas) wird inline in der Route geprüft —
+// Zod kennt den energyType aus der URL nicht.
+export const UpdateEnergyDemandSchema = z.object({
+  annual_consumption_kwh:    z.number().min(0).nullable().optional(),
+  consumption_known:         z.boolean().nullable().optional(),
+  household_size:            z.number().int().min(1).nullable().optional(),
+  living_area_sqm:           z.number().min(0).nullable().optional(),
+  heating_type:              z.string().max(100).nullable().optional(),
+  hot_water_with_gas:        z.boolean().nullable().optional(),
+  current_provider:          z.string().max(200).nullable().optional(),
+  current_tariff:            z.string().max(200).nullable().optional(),
+  monthly_payment:           z.number().min(0).nullable().optional(),
+  contract_end_date:         z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datumsformat (YYYY-MM-DD)").nullable().optional(),
+  cancellation_period_known: z.boolean().nullable().optional(),
+  price_guarantee:           z.boolean().nullable().optional(),
+  meter_number:              z.string().max(100).nullable().optional(),
+  market_location_id:        z.string().max(100).nullable().optional(),
+});
+
+export type UpdateEnergyDemandInput = z.infer<typeof UpdateEnergyDemandSchema>;
