@@ -468,3 +468,47 @@ Migration: `supabase/migrations/20260615000012_block10b_submit_public_lead_rpc.s
 - `score = 0`, `score_label = 'cold'`, `status = 'new'` explizit gesetzt (DEFAULTs vorhanden, aber explizit für Klarheit)
 - `country` fällt auf `'DE'` zurück wenn nicht im `p_address`-Objekt angegeben
 - Keine Validierung innerhalb der RPC für Felder, die DB-Constraints (NOT NULL, CHECK, UNIQUE) oder API-Schicht (Zod) bereits abdecken
+
+---
+
+## Block 10c: POST /api/public/leads ✓
+
+Abgeschlossen: 2026-06-16
+
+Planungsdokument: `docs/block10c-api-plan.md`
+
+### Neue Dateien
+
+- [x] `src/app/api/public/leads/route.ts` — Route Handler (POST)
+- [x] `src/lib/validation/public-lead.ts` — Zod Schema `PublicLeadSchema`
+- [x] `src/lib/captcha/turnstile.ts` — Cloudflare Turnstile Verifikation
+- [x] `src/lib/rate-limit/index.ts` — Upstash Redis Fixed Window Rate Limit
+
+### Geänderte Dateien
+
+- [x] `src/lib/api/errors.ts` — erweitert um P0001 (3 RPC Guards), 23502, 23514, 22P02
+- [x] `src/types/database.ts` — `submit_public_lead` in `Database.Functions` ergänzt
+- [x] `.env.local.example` — 4 neue Env Vars ergänzt
+- [x] `package.json` — `@upstash/ratelimit`, `@upstash/redis`, `zod` (direkte Dep) hinzugefügt
+
+### Ablauf der Route (Rate Limit → JSON → Zod → Turnstile → RPC)
+
+1. IP aus `X-Forwarded-For` extrahieren
+2. Rate Limit prüfen (5 Req/10 Min pro IP) → 429 + `Retry-After` bei Überschreitung
+3. JSON parsen → 400 bei ungültigem Body
+4. Zod validieren → 422 + `flatten()` Details bei Fehler
+5. Turnstile verifizieren → 422 bei Captcha-Fehler
+6. `adminClient.rpc("submit_public_lead", params)` — einzige DB-Operation
+7. Fehler → `handleSupabaseError()` → passender HTTP-Status
+8. Erfolg → 201 `{ data: { lead_id, lead_number } }`
+
+### Entscheidungen
+
+- `source = "website_form"` hardcoded in Route (nie vom Client gesteuert)
+- `referral_code: ""` und Whitespace → `undefined` via `z.preprocess` (kein 422)
+- Nur echte Referral-Codes werden gegen Regex `^[A-Z0-9-]{3,32}$` geprüft
+- Rate Limit deaktiviert wenn `UPSTASH_REDIS_*` nicht gesetzt (Dev-Bypass)
+- Turnstile deaktiviert wenn `TURNSTILE_SECRET_KEY` nicht gesetzt (Dev-Bypass)
+- P0001 in `handleSupabaseError()` mappt auf `error.message` → 3 verschiedene 422-Meldungen
+- 23514 (CHECK-Verletzung) und 22P02 (ungültiger Enum-Cast) → 422 (neu)
+- `npx tsc --noEmit` — 0 Fehler

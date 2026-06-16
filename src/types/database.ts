@@ -248,36 +248,43 @@ export type LeadReferral = {
 
 export type Database = {
   public: {
+    Views: Record<string, never>;
     Tables: {
       profiles: {
         Row: Profile;
         Insert: Omit<Profile, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<Profile, "id" | "auth_user_id" | "created_at">>;
+        Relationships: never[];
       };
       leads: {
         Row: Lead;
         Insert: Omit<Lead, "id" | "lead_number" | "created_at" | "updated_at">;
         Update: Partial<Omit<Lead, "id" | "lead_number" | "created_at">>;
+        Relationships: never[];
       };
       addresses: {
         Row: Address;
         Insert: Omit<Address, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<Address, "id" | "lead_id" | "created_at">>;
+        Relationships: never[];
       };
       energy_demands: {
         Row: EnergyDemand;
         Insert: Omit<EnergyDemand, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<EnergyDemand, "id" | "lead_id" | "created_at">>;
+        Relationships: never[];
       };
       lead_status_history: {
         Row: LeadStatusHistory;
         Insert: Omit<LeadStatusHistory, "id" | "created_at">;
         Update: never;
+        Relationships: never[];
       };
       lead_notes: {
         Row: LeadNote;
         Insert: Omit<LeadNote, "id" | "created_at" | "updated_at">;
         Update: Partial<Pick<LeadNote, "note">>;
+        Relationships: never[];
       };
       documents: {
         Row: Document;
@@ -294,31 +301,37 @@ export type Database = {
             | "ocr_processed_at"
           >
         >;
+        Relationships: never[];
       };
       offers: {
         Row: Offer;
         Insert: Omit<Offer, "id" | "offer_number" | "created_at" | "updated_at">;
         Update: Partial<Omit<Offer, "id" | "lead_id" | "offer_number" | "created_at">>;
+        Relationships: never[];
       };
       communications_log: {
         Row: CommunicationLog;
         Insert: Omit<CommunicationLog, "id" | "created_at" | "updated_at">;
         Update: Partial<Pick<CommunicationLog, "status" | "external_id" | "content_summary">>;
+        Relationships: never[];
       };
       affiliates: {
         Row: Affiliate;
         Insert: Omit<Affiliate, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<Affiliate, "id" | "created_at">>;
+        Relationships: never[];
       };
       affiliate_links: {
         Row: AffiliateLink;
         Insert: Omit<AffiliateLink, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<AffiliateLink, "id" | "affiliate_id" | "created_at">>;
+        Relationships: never[];
       };
       lead_referrals: {
         Row: LeadReferral;
         Insert: Omit<LeadReferral, "id" | "created_at">;
         Update: never;
+        Relationships: never[];
       };
     };
     Functions: {
@@ -327,6 +340,10 @@ export type Database = {
       is_admin: { Args: Record<never, never>; Returns: boolean };
       is_manager_or_above: { Args: Record<never, never>; Returns: boolean };
       can_access_lead: { Args: { p_lead_id: string }; Returns: boolean };
+      submit_public_lead: {
+        Args: Record<string, unknown>;
+        Returns: { lead_id: string; lead_number: string };
+      };
     };
     Enums: {
       user_role: UserRole;

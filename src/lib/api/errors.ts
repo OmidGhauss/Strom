@@ -41,6 +41,23 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
   console.error("[supabase]", { code: error.code, message: error.message });
 
   switch (error.code) {
+    case "P0001": // RAISE EXCEPTION mit custom ERRCODE
+      if (error.message === "CONSENT_REQUIRED") {
+        return ApiErrors.unprocessable("Einwilligung erforderlich");
+      }
+      if (error.message === "ENERGY_DEMANDS_REQUIRED") {
+        return ApiErrors.unprocessable("Energieverbrauch erforderlich");
+      }
+      if (error.message === "ENERGY_DEMANDS_PRODUCT_TYPE_MISMATCH") {
+        return ApiErrors.unprocessable("Energiedaten passen nicht zum gewählten Produkttyp");
+      }
+      return ApiErrors.unprocessable("Anfrage konnte nicht verarbeitet werden");
+    case "23502": // not_null_violation
+      return ApiErrors.unprocessable("Pflichtfeld fehlt");
+    case "23514": // check_violation
+      return ApiErrors.unprocessable("Ungültige Feldkombination");
+    case "22P02": // invalid_text_representation (ungültiger Enum-Cast)
+      return ApiErrors.unprocessable("Ungültiger Wert");
     case "23505": // unique_violation
       return ApiErrors.conflict("Datensatz existiert bereits");
     case "23503": // foreign_key_violation
