@@ -408,3 +408,35 @@ Migration: `supabase/migrations/20260615000011_block9a_affiliate_v1.sql`
 - Keine `commissions`-Tabelle in V1 — reine Attribution
 - Kein Pyramidensystem in V1
 - ON DELETE CASCADE für `lead_referrals.lead_id` (DSGVO), RESTRICT für alle anderen FKs
+
+---
+
+## Block 10a: database.ts Synchronisierung ✓
+
+Abgeschlossen: 2026-06-16
+
+Erster Schritt von Block 10 (Public Lead Submit). Keine SQL-Migration, keine API Route.
+
+### Abweichungen gefunden und korrigiert
+
+| Typ | Abweichung | Korrektur |
+|---|---|---|
+| `Profile.full_name` | `string \| null` — DB ist `NOT NULL` | → `string` |
+| `Lead` | fehlende Felder | `source: string \| null`, `data_transfer_consent: boolean \| null` ergänzt |
+| `Address.zip_code` | falsche Feldbezeichnung | → `postal_code` |
+| `Address` | fehlende Felder | `address_addition: string \| null`, `state: string \| null` ergänzt |
+| `EnergyDemand` | 11 Felder fehlten | `consumption_known`, `household_size`, `living_area_sqm`, `heating_type`, `current_provider`, `current_tariff`, `monthly_payment`, `contract_end_date`, `cancellation_period_known`, `price_guarantee`, `market_location_id` ergänzt |
+| `LeadNote.content` | falsche Feldbezeichnung — DB-Spalte heißt `note` | → `note` |
+| `Document.mime_type` | nicht nullable — DB ist `NULL`-fähig | → `string \| null` |
+| `Document.file_size_bytes` | nicht nullable — DB ist `bigint NULL` | → `number \| null` |
+
+### Weitere Anpassungen
+
+- `lead_notes.Update`: `Pick<LeadNote, "content">` → `Pick<LeadNote, "note">`
+- `documents.Update`: `mime_type` und `file_size_bytes` in Whitelist aufgenommen
+- Enums und Affiliate-Typen: keine Abweichungen gefunden
+
+### Ergebnis
+
+- `npx tsc --noEmit` — 0 Fehler, 0 Warnungen
+- Keine anderen Quelldateien referenzieren die umbenannten Felder (`content`, `zip_code`)

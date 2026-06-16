@@ -71,7 +71,7 @@ export type Profile = {
   id: string;
   auth_user_id: string;
   email: string;
-  full_name: string | null;
+  full_name: string;
   role: UserRole;
   is_active: boolean;
   created_at: string;
@@ -85,19 +85,21 @@ export type Lead = {
   last_name: string;
   email: string;
   phone: string | null;
-  customer_type: CustomerType;
   product_type: ProductType;
+  customer_type: CustomerType;
   status: LeadStatus;
   score: number;
   score_label: LeadScoreLabel;
-  assigned_to: string | null;
-  privacy_consent: boolean;
-  contact_consent: boolean;
+  source: string | null;
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
-  utm_term: string | null;
   utm_content: string | null;
+  utm_term: string | null;
+  assigned_to: string | null;
+  privacy_consent: boolean;
+  contact_consent: boolean;
+  data_transfer_consent: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -108,9 +110,11 @@ export type Address = {
   address_type: AddressType;
   street: string | null;
   house_number: string | null;
-  zip_code: string | null;
+  address_addition: string | null;
+  postal_code: string | null;
   city: string | null;
-  country: string;
+  state: string | null;
+  country: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -120,8 +124,19 @@ export type EnergyDemand = {
   lead_id: string;
   energy_type: EnergyType;
   annual_consumption_kwh: number | null;
-  meter_number: string | null;
+  consumption_known: boolean | null;
+  household_size: number | null;
+  living_area_sqm: number | null;
+  heating_type: string | null;
   hot_water_with_gas: boolean | null;
+  current_provider: string | null;
+  current_tariff: string | null;
+  monthly_payment: number | null;
+  contract_end_date: string | null;
+  cancellation_period_known: boolean | null;
+  price_guarantee: boolean | null;
+  meter_number: string | null;
+  market_location_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -140,7 +155,7 @@ export type LeadNote = {
   id: string;
   lead_id: string;
   created_by: string;
-  content: string;
+  note: string;
   created_at: string;
   updated_at: string;
 };
@@ -151,10 +166,10 @@ export type Document = {
   uploaded_by: string | null;
   document_type: DocumentType;
   file_name: string;
-  mime_type: string;
-  file_size_bytes: number;
-  storage_bucket: string;
   storage_path: string;
+  storage_bucket: string;
+  mime_type: string | null;
+  file_size_bytes: number | null;
   ocr_status: string | null;
   ocr_text: string | null;
   ocr_processed_at: string | null;
@@ -262,12 +277,23 @@ export type Database = {
       lead_notes: {
         Row: LeadNote;
         Insert: Omit<LeadNote, "id" | "created_at" | "updated_at">;
-        Update: Partial<Pick<LeadNote, "content">>;
+        Update: Partial<Pick<LeadNote, "note">>;
       };
       documents: {
         Row: Document;
         Insert: Omit<Document, "id" | "created_at" | "updated_at">;
-        Update: Partial<Pick<Document, "document_type" | "file_name" | "ocr_status" | "ocr_text" | "ocr_processed_at">>;
+        Update: Partial<
+          Pick<
+            Document,
+            | "document_type"
+            | "file_name"
+            | "mime_type"
+            | "file_size_bytes"
+            | "ocr_status"
+            | "ocr_text"
+            | "ocr_processed_at"
+          >
+        >;
       };
       offers: {
         Row: Offer;
