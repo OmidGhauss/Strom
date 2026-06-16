@@ -1,4 +1,4 @@
-// Manuell gepflegte DB-Typen auf Basis der Supabase-Migrationen (Block 2–8).
+// Manuell gepflegte DB-Typen auf Basis der Supabase-Migrationen (Block 2–9a).
 // Ersetzt bis zur Einrichtung von `supabase gen types typescript` die generierten Typen.
 
 // ---------------------------------------------------------------------------
@@ -58,6 +58,10 @@ export type CommunicationType = "email" | "call" | "sms" | "system";
 export type CommunicationDirection = "inbound" | "outbound" | "internal";
 
 export type CommunicationStatus = "pending" | "success" | "failed";
+
+export type AffiliateStatus = "active" | "inactive" | "suspended";
+
+export type AffiliateLinkStatus = "active" | "inactive";
 
 // ---------------------------------------------------------------------------
 // Tabellen
@@ -195,6 +199,34 @@ export type CommunicationLog = {
   updated_at: string;
 };
 
+export type Affiliate = {
+  id: string;
+  name: string;
+  email: string;
+  status: AffiliateStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AffiliateLink = {
+  id: string;
+  affiliate_id: string;
+  referral_code: string;
+  label: string | null;
+  status: AffiliateLinkStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LeadReferral = {
+  id: string;
+  lead_id: string;
+  affiliate_link_id: string;
+  notes: string | null;
+  created_at: string;
+};
+
 // ---------------------------------------------------------------------------
 // Supabase Database-Typ für createClient<Database>()
 // ---------------------------------------------------------------------------
@@ -247,6 +279,21 @@ export type Database = {
         Insert: Omit<CommunicationLog, "id" | "created_at" | "updated_at">;
         Update: Partial<Pick<CommunicationLog, "status" | "external_id" | "content_summary">>;
       };
+      affiliates: {
+        Row: Affiliate;
+        Insert: Omit<Affiliate, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<Affiliate, "id" | "created_at">>;
+      };
+      affiliate_links: {
+        Row: AffiliateLink;
+        Insert: Omit<AffiliateLink, "id" | "created_at" | "updated_at">;
+        Update: Partial<Omit<AffiliateLink, "id" | "affiliate_id" | "created_at">>;
+      };
+      lead_referrals: {
+        Row: LeadReferral;
+        Insert: Omit<LeadReferral, "id" | "created_at">;
+        Update: never;
+      };
     };
     Functions: {
       current_profile_id: { Args: Record<never, never>; Returns: string };
@@ -268,6 +315,8 @@ export type Database = {
       communication_type: CommunicationType;
       communication_direction: CommunicationDirection;
       communication_status: CommunicationStatus;
+      affiliate_status: AffiliateStatus;
+      affiliate_link_status: AffiliateLinkStatus;
     };
   };
 };

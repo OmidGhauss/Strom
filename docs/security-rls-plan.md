@@ -203,6 +203,41 @@ Identisch zu offers.
 
 ---
 
+### affiliates (Block 9a)
+
+| Operation | employee | manager | admin |
+|-----------|----------|---------|-------|
+| SELECT | nein | ja | ja |
+| INSERT | nein | nein | ja |
+| UPDATE | nein | nein | ja |
+| DELETE | nein | nein | nein (RESTRICT) |
+
+### affiliate_links (Block 9a)
+
+| Operation | employee | manager | admin |
+|-----------|----------|---------|-------|
+| SELECT | nein | ja | ja |
+| INSERT | nein | nein | ja |
+| UPDATE | nein | nein | ja |
+| DELETE | nein | nein | nein (RESTRICT) |
+
+### lead_referrals (Block 9a)
+
+| Operation | employee | manager | admin |
+|-----------|----------|---------|-------|
+| SELECT | can_access_lead(lead_id) | can_access_lead(lead_id) | ja |
+| INSERT | nein | nein | ja |
+| UPDATE | nein | nein | nein |
+| DELETE | nein | nein | ja |
+
+**Wichtig — Employee-Sichtbarkeit auf lead_referrals:**
+Employee sieht, *dass* ein Lead über einen Referral-Link kam (`affiliate_link_id` ist sichtbar),
+aber er kann die Affiliate-Stammdaten nicht lesen (`affiliates` und `affiliate_links` sind für
+Employee nicht zugänglich). Die Dashboard-UI zeigt Employees daher nur "Referral-Lead: ja/nein"
+ohne Affiliate-Details.
+
+---
+
 ## 5. DELETE-Zusammenfassung
 
 | Tabelle | employee | manager | admin |
@@ -216,6 +251,9 @@ Identisch zu offers.
 | documents | nein | nein | ja |
 | offers | nein | nein | ja |
 | communications_log | nein | nein | ja |
+| affiliates | nein | nein | nein (RESTRICT) |
+| affiliate_links | nein | nein | nein (RESTRICT) |
+| lead_referrals | nein | nein | ja (CASCADE von leads deckt Standardfall ab) |
 
 Manager hat kein DELETE auf Leads. DSGVO-Löschungen sind Admin-Operationen
 mit explizitem Prozess (Storage-Dateien zuerst, dann Lead).

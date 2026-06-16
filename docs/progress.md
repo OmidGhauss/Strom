@@ -371,15 +371,40 @@ Abgeschlossen: 2026-06-15
 ### Geplante Folge-Blocks
 
 ```
-Block 9:  API Foundation + GET /api/leads             ✓
+Block 9:   API Foundation + GET /api/leads             ✓
     ↓
-Block ?:  Affiliate-V1-Datenblock (Tabellen, Migrationen)
+Block 9a:  Affiliate V1 Datenmodell                    ✓
     ↓
-Block ?:  Public Lead Submit – POST /api/public/leads
-          mit atomarem Lead + energy_demands + lead_referrals via RPC
-          + Rate Limiting / Captcha (Pflicht)
+Block ?:   Public Lead Submit – POST /api/public/leads
+           mit atomarem Lead + energy_demands + lead_referrals via RPC
+           + Rate Limiting / Captcha (Pflicht)
     ↓
-Block ?:  Weitere interne CRM-Endpoints (P1–P5)
+Block ?:   Weitere interne CRM-Endpoints (P1–P5)
     ↓
-Block ?:  Tests (RLS, API, E2E)
+Block ?:   Tests (RLS, API, E2E)
 ```
+
+---
+
+## Block 9a: Affiliate V1 Datenmodell ✓
+
+Abgeschlossen: 2026-06-16
+
+Planungsdokument: `docs/affiliate-v1-plan.md`
+Migration: `supabase/migrations/20260615000011_block9a_affiliate_v1.sql`
+
+### Erledigte Schritte
+
+- [x] Migration `20260615000011_block9a_affiliate_v1.sql` erstellt
+- [x] Tabellen `affiliates`, `affiliate_links`, `lead_referrals` angelegt
+- [x] `referral_code` Constraints: UNIQUE + CHECK UPPERCASE + CHECK `^[A-Z0-9-]{3,32}$`
+- [x] RLS auf allen 3 Tabellen aktiviert, 8 Policies angelegt
+- [x] `src/types/database.ts` und `docs/security-rls-plan.md` ergänzt
+
+### Entscheidungen
+
+- `referral_code` immer UPPERCASE — API normalisiert, DB erzwingt per CHECK
+- Employee sieht `lead_referrals` via `can_access_lead(lead_id)`, aber nicht `affiliates`/`affiliate_links`
+- Keine `commissions`-Tabelle in V1 — reine Attribution
+- Kein Pyramidensystem in V1
+- ON DELETE CASCADE für `lead_referrals.lead_id` (DSGVO), RESTRICT für alle anderen FKs
