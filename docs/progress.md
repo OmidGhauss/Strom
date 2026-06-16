@@ -640,3 +640,69 @@ Plan: Block-12-Architekturplan Rev. 2 + Ergänzungen (Race Case, EnergyDemand 40
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 12b: Product Type Change RPC ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-12b-Architekturplan Rev. 3
+
+### Neue Dateien (2)
+
+- [x] `supabase/migrations/20260618000002_block12b_change_lead_product_type_rpc.sql`
+  - RPC `change_lead_product_type(p_lead_id, p_product_type)` — SECURITY INVOKER
+  - Locking: SELECT leads FOR UPDATE + SELECT energy_demands FOR UPDATE
+  - Offers-Conflict-Check nach Locking → OFFERS_REFERENCE_ENERGY_DEMAND → P0001
+  - Atomar: UPDATE leads + DELETE energy_demands + INSERT energy_demands
+  - RETURNS TABLE(lead_id, old_product_type, new_product_type, energy_types[])
+  - REVOKE FROM PUBLIC, anon, authenticated / GRANT TO service_role
+- [x] `src/app/api/leads/[id]/product-type/route.ts` — PATCH
+
+### Geänderte Dateien (4)
+
+- [x] `src/lib/validation/lead.ts` — UpdateProductTypeSchema + UpdateProductTypeInput
+- [x] `src/lib/api/guards.ts` — assertManagerOrAbove (employee → 403)
+- [x] `src/lib/api/errors.ts` — P0001 OFFERS_REFERENCE_ENERGY_DEMAND → 409
+- [x] `src/types/database.ts` — change_lead_product_type in Functions
+
+### Implementierter Endpoint
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| PATCH | /api/leads/[id]/product-type | product_type + energy_demands atomar via RPC |
+
+### Sicherheitslogik
+
+- `requireAuth()` + `assertManagerOrAbove` → employee erhält 403 (vor RLS-Gate)
+- UUID-Validierung vor DB-Zugriff
+- User-aware RLS-Gate (createClient) vor adminClient.rpc
+- No-op Guard: gleicher product_type → 200 changed:false, kein RPC
+- adminClient.rpc ausschließlich nach positivem Gate
+
+### Locking-Kette
+
+- `SELECT leads … FOR UPDATE`: verhindert parallele product_type-Wechsel für denselben Lead
+- `SELECT energy_demands … FOR UPDATE`: Offer-Insert-Race verhindert — FK-Prüfung des parallelen Inserts wartet auf COMMIT/ROLLBACK
+  - Nach COMMIT: energy_demand gelöscht → Offer-FK-Prüfung schlägt fehl (23503)
+  - Nach ROLLBACK: Lock freigegeben → Offer-Insert kann fortfahren
+- Offers-Conflict-Check nach Locking: stabil, kein TOCTOU
+
+### Entscheidungen
+
+- SECURITY INVOKER explizit — kein SECURITY DEFINER (service_role bypassed RLS ohnehin)
+- Hard block bei Offers-Conflict — kein Force-Flag, kein Status-Filter in V1
+- energy_types deterministisch (electricity vor gas) — kein array_agg nach Änderungen
+- Kein product_type-Audit-Trail in V1
+
+### Nicht in Block 12b (bewusst ausgelassen)
+
+- lead_product_type_history → späterer Block
+- Force-Flag / Status-gefilterter Conflict-Check → späterer Block
+- DELETE /addresses, DELETE /energy-demands → späterer Block
+- Offers, Notes, Documents, E-Mail → spätere Blöcke
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler

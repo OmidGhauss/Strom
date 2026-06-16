@@ -43,6 +43,10 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
   switch (error.code) {
     case "P0001": // RAISE EXCEPTION mit custom ERRCODE
       if (error.message === "LEAD_NOT_FOUND") return ApiErrors.notFound("Lead");
+      if (error.message === "OFFERS_REFERENCE_ENERGY_DEMAND")
+        return ApiErrors.conflict(
+          "Produkttyp nicht änderbar: Bestehende Angebote referenzieren den betroffenen Energiebedarf"
+        );
       if (error.message === "CONSENT_REQUIRED") {
         return ApiErrors.unprocessable("Einwilligung erforderlich");
       }

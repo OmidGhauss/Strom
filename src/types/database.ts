@@ -353,6 +353,18 @@ export type Database = {
         };
         Returns: Array<{ lead_id: string; old_status: string; new_status: string }>;
       };
+      change_lead_product_type: {
+        Args: {
+          p_lead_id: string;
+          p_product_type: string;
+        };
+        Returns: Array<{
+          lead_id: string;
+          old_product_type: string;
+          new_product_type: string;
+          energy_types: string[];
+        }>;
+      };
     };
     Enums: {
       user_role: UserRole;

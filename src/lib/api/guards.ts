@@ -120,6 +120,13 @@ export function assertOfferNotSuperseded(
   }
 }
 
+// Section 10 (Block 12b): product_type darf nur von Manager/Admin geändert werden.
+export function assertManagerOrAbove(role: UserRole): void {
+  if (role === "employee") {
+    throw ApiErrors.forbidden("Nur Manager und Admin dürfen den Produkttyp ändern");
+  }
+}
+
 // Section 9 (Block 11): Terminale Statuse dürfen nur von Manager/Admin gesetzt werden.
 const MANAGER_ONLY_STATUSES = ["completed", "rejected", "disqualified", "lost"] as const;
 

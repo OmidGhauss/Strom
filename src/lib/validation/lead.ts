@@ -85,3 +85,10 @@ export const UpdateEnergyDemandSchema = z.object({
 });
 
 export type UpdateEnergyDemandInput = z.infer<typeof UpdateEnergyDemandSchema>;
+
+// Für PATCH /api/leads/[id]/product-type
+export const UpdateProductTypeSchema = z.object({
+  product_type: z.enum(["electricity", "gas", "both"]),
+});
+
+export type UpdateProductTypeInput = z.infer<typeof UpdateProductTypeSchema>;
