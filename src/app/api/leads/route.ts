@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireAuth } from "@/lib/api/auth";
-import { ApiErrors, handleSupabaseError } from "@/lib/api/errors";
+import { handleSupabaseError } from "@/lib/api/errors";
 import { listResponse } from "@/lib/api/responses";
 import { parsePagination, paginationRange } from "@/lib/validation/common";
 
