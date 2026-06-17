@@ -1440,3 +1440,95 @@ Cleanup-Mechanismus (z.B. Cron-Job für Dokumente ohne erfolgreichen Upload) ist
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 19: Offer Email Sending (Angebotsversand) ✓
+
+Abgeschlossen: 2026-06-17
+
+### Erledigte Schritte
+
+- [x] `npm install resend` (5 Pakete, kein Breaking Change)
+- [x] `src/lib/email/resend.ts` — createResendClient(), getFromEmail(), getCompanyName()
+- [x] `src/lib/email/offer-email.ts` — escapeHtml() + buildOfferEmailHtml()
+- [x] `src/lib/api/guards.ts` — assertOfferSendable hinzugefügt
+- [x] `src/lib/validation/lead.ts` — SendOfferEmailSchema, SendOfferEmailInput
+- [x] `src/app/api/leads/[id]/offers/[offerId]/send/route.ts` — vollständiger Flow
+- [x] `.env.local.example` — RESEND_API_KEY, RESEND_FROM_EMAIL, COMPANY_NAME ergänzt
+
+### Implementierungsdetails
+
+#### Sicherheitsinvarianten
+
+- **Employee darf recipient_email nicht überschreiben:** Employee-Body mit recipient_email → 403
+- **Manager/Admin:** dürfen recipient_email setzen (anderer Empfänger für Test/Weiterleitung)
+- **Superseded-Check vor Ownership-Check:** kein Info-Leak ob Offer dem Employee gehört
+- **Erlaubte Statuse:** draft, sent (Re-Send erlaubt); accepted/rejected/expired → 409
+- **adminClient** erst nach positivem user-aware RLS-Gate (Offer-SELECT)
+- **RESEND_API_KEY/RESEND_FROM_EMAIL:** niemals NEXT_PUBLIC_
+
+#### HTML-Escaping
+
+`escapeHtml()` in `offer-email.ts` escapet alle dynamischen Werte:
+- `&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`, `"` → `&quot;`, `'` → `&#39;`
+- message-Zeilenumbrüche: `escapeHtml(message).replace(/\n/g, "<br />")`
+- Numerische Werte (Preise) kommen aus DB (number), werden mit `toLocaleString("de-DE", { style: "currency", currency: "EUR" })` formatiert — kein Escaping nötig
+
+#### Konsistenzstrategie (kein RPC)
+
+Provider-Call ist nicht transaktional → sequentielle user-aware DB-Ops + CAS ausreichend:
+
+```
+1. requireAuth → UUID → SELECT offer → assertOfferSendable
+2. pdf_document_id != null check
+3. Body parse → recipient_email Guard
+4. SELECT lead → recipientEmail bestimmen
+5. SELECT document (storage_path, storage_bucket, file_name)
+6. ENV-Check (RESEND_*) → 500 wenn fehlt
+7. adminClient (nach Gate)
+8. Storage download → Buffer
+9. subject/html aufbauen
+10. INSERT comm_log (pending) VOR Provider-Call
+11. resend.emails.send(...)
+12. Provider-Fehler → UPDATE comm_log (failed) → 502
+13. Provider-Erfolg → UPDATE comm_log (success, external_id)
+14. CAS: UPDATE offers SET status='sent' WHERE status='draft'
+15. PGRST116 auf CAS → 201 + warning (Re-Send, Offer war bereits sent)
+16. 201 Created: { communication_log_id, offer_id, recipient_email, status_updated, warning? }
+```
+
+#### CAS draft→sent
+
+`.update({ status: "sent" }).eq("status", "draft").select("status").single()`
+
+- Offer war draft → matched → status_updated: true
+- Offer war bereits sent (Race/Re-Send) → PGRST116 → status_updated: false + warning (kein Fehler — E-Mail trotzdem gesendet)
+- Andere CAS-Fehler → geloggt, trotzdem 201 (E-Mail bereits gesendet)
+
+#### Resend Attachment
+
+SDK-Typ: `content?: string | Buffer` — Buffer direkt akzeptiert, kein Base64.
+`blobData.arrayBuffer()` → `Buffer.from(...)` → direkt in `attachments[].content`.
+
+### Entscheidungen
+
+- **Kein RPC:** Provider-Call ist externe Seiteneffekt-Operation, nicht transaktional.
+  Sequential user-aware Client-Ops + CAS auf offer.status sind ausreichend.
+- **Re-Send erlaubt (sent→sent):** assertOfferSendable lässt status="sent" durch.
+  CAS greift nicht (Offer war nicht draft) → 201 + warning. Kein Hard-Block.
+- **recipient_email nur Manager/Admin:** Privacy-Schutz; Employee sendet immer an leads.email.
+- **PGRST116 nach CAS = kein Fehler:** E-Mail wurde bereits zugestellt; Status-Drift ist acceptable.
+- **501 vs 502:** Provider-Fehler (Resend) → 502 Bad Gateway; Konfig-Fehler → 500 CONFIG_ERROR.
+
+### Nicht in Block 19 (bewusst ausgelassen)
+
+- E-Mail-Templates mit mehrsprachiger Unterstützung
+- Bounce/Delivery-Webhook (Resend Webhooks → comm_log update)
+- Re-Versand-Limit / Rate-Limiting pro Offer
+- CC/BCC
+- Frontend/UI
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler

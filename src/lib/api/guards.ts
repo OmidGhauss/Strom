@@ -236,6 +236,27 @@ export function assertOfferPdfGenerationAllowed(
   }
 }
 
+// Section 19: Offer-Versand.
+// superseded vor allen anderen Checks (kein Info-Leak).
+// Erlaubte Statuse: draft, sent (Re-Send erlaubt).
+// Terminal-Statuse (accepted/rejected/expired) → 409.
+export function assertOfferSendable(
+  role: UserRole,
+  createdBy: string | null,
+  profileId: string,
+  status: string
+): void {
+  if (status === "superseded") {
+    throw ApiErrors.conflict("Superseded Angebote können nicht gesendet werden");
+  }
+  if (status !== "draft" && status !== "sent") {
+    throw ApiErrors.conflict("Angebot kann in diesem Status nicht gesendet werden");
+  }
+  if (role === "employee" && createdBy !== profileId) {
+    throw ApiErrors.forbidden("Employees dürfen nur eigene Angebote versenden");
+  }
+}
+
 // Section 1: Employee-eigenes Profil: nur full_name erlaubt.
 const EMPLOYEE_PROFILE_WHITELIST = ["full_name"] as const;
 

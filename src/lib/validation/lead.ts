@@ -252,3 +252,14 @@ export const UploadUrlRequestSchema = z.object({
 });
 
 export type UploadUrlRequestInput = z.infer<typeof UploadUrlRequestSchema>;
+
+// Für POST /api/leads/[id]/offers/[offerId]/send
+// recipient_email: nur Manager/Admin; Employee → 403 wenn angegeben (Guard in Route).
+// Alle Felder optional — leerer Body ist valide (defaults greifen in der Route).
+export const SendOfferEmailSchema = z.object({
+  recipient_email: z.string().email().optional(),
+  subject:         z.string().min(1).max(500).optional(),
+  message:         z.string().max(5000).nullable().optional(),
+});
+
+export type SendOfferEmailInput = z.infer<typeof SendOfferEmailSchema>;
