@@ -141,3 +141,12 @@ export const UpdateOfferSchema = z.object({
 });
 
 export type UpdateOfferInput = z.infer<typeof UpdateOfferSchema>;
+
+// Für PATCH /api/leads/[id]/offers/[offerId]/status
+// draft und superseded sind nicht manuell setzbar über diesen Endpoint.
+// draft: kein Rollback nach sent. superseded: nur durch Versioning (Block 14c).
+export const UpdateOfferStatusSchema = z.object({
+  status: z.enum(["sent", "accepted", "rejected", "expired"]),
+});
+
+export type UpdateOfferStatusInput = z.infer<typeof UpdateOfferStatusSchema>;

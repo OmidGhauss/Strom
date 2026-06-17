@@ -847,3 +847,66 @@ PATCH (effektiver Zielzustand, wenn effectiveEnergyDemandId !== null):
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 14b: Offer Status Workflow ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-14b-Architekturplan Rev. 2
+
+### Neue Dateien (1)
+
+- [x] `src/app/api/leads/[id]/offers/[offerId]/status/route.ts` — PATCH
+
+### Geänderte Dateien (2)
+
+- [x] `src/lib/validation/lead.ts` — UpdateOfferStatusSchema, UpdateOfferStatusInput
+- [x] `src/lib/api/guards.ts` — assertOfferStatusTransition
+
+### Implementierter Endpoint
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| PATCH | /api/leads/[id]/offers/[offerId]/status | Statuswechsel mit Compare-and-Set |
+
+### State Machine
+
+```
+draft → sent
+sent  → accepted | rejected | expired
+accepted / rejected / expired / superseded → keine weiteren Wechsel
+```
+
+`draft` und `superseded` sind im Zod-Schema nicht erlaubt (kein Rollback, kein manuelles superseded).
+
+### Rollenregeln
+
+| Übergang | employee (eigene) | employee (fremd) | manager | admin |
+|----------|-------------------|------------------|---------|-------|
+| draft → sent | ✓ | ✗ 403 | ✓ | ✓ |
+| sent → accepted | ✗ 403 | ✗ 403 | ✓ | ✓ |
+| sent → rejected | ✓ | ✗ 403 | ✓ | ✓ |
+| sent → expired | ✓ | ✗ 403 | ✓ | ✓ |
+
+### Compare-and-Set (optimistic concurrency)
+
+`.update({ status: body.status }).eq("status", currentStatus)`
+
+PGRST116 beim READ → 404 Offer
+PGRST116 beim UPDATE → 409 "Offer-Status wurde zwischenzeitlich geändert"
+
+Parallele Requests auf demselben Offer: erster schreibt durch, zweiter findet keinen Match mehr → 409.
+
+### Nicht in Block 14b (bewusst ausgelassen)
+
+- offer_status_history → kommt mit Versioning (Block 14c)
+- PDF-/E-Mail-Versand bei draft→sent → später
+- Automatischer communications_log-Eintrag → Block 15
+- superseded manuell setzen → Block 14c
+- Admin Force Override → später
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler

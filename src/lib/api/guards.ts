@@ -126,6 +126,30 @@ export function assertOfferEditableByUser(
   }
 }
 
+// Section 14b: Erlaubte Statusübergänge für Offers.
+// Terminal-Zustände (accepted/rejected/expired/superseded) haben keine erlaubten Zielzustände.
+// superseded ist nicht manuell setzbar (kommt mit Versioning).
+const ALLOWED_OFFER_STATUS_TRANSITIONS: Record<string, string[]> = {
+  draft:      ["sent"],
+  sent:       ["accepted", "rejected", "expired"],
+  accepted:   [],
+  rejected:   [],
+  expired:    [],
+  superseded: [],
+};
+
+export function assertOfferStatusTransition(
+  currentStatus: string,
+  newStatus: string
+): void {
+  const allowed = ALLOWED_OFFER_STATUS_TRANSITIONS[currentStatus] ?? [];
+  if (!allowed.includes(newStatus)) {
+    throw ApiErrors.conflict(
+      `Statuswechsel von '${currentStatus}' nach '${newStatus}' nicht erlaubt`
+    );
+  }
+}
+
 // Section 3: Superseded-Angebote dürfen nicht akzeptiert werden.
 export function assertOfferNotSuperseded(
   currentStatus: string,
