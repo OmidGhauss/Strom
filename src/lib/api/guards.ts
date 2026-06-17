@@ -46,11 +46,14 @@ export function enrichWithScoreLabel<T extends { score?: number }>(
 }
 
 // Section 7: Unveränderliche Dokumentfelder dürfen nicht in der Payload stehen.
+// document_type ist immutable weil storage_path den document_type im Pfad kodiert.
+// Änderung via PATCH würde Pfad und Typ dauerhaft auseinanderlaufen lassen.
 const DOCUMENT_IMMUTABLE_FIELDS = [
   "storage_path",
   "storage_bucket",
   "lead_id",
   "uploaded_by",
+  "document_type",
 ] as const;
 
 export function assertDocumentImmutableFields(
@@ -140,6 +143,19 @@ export function assertCommunicationEditableByUser(
     throw ApiErrors.forbidden(
       "Employees dürfen nur eigene Kommunikationseinträge bearbeiten"
     );
+  }
+}
+
+// Section 16: Dokument darf nur vom Uploader (Employee) oder Manager/Admin bearbeitet werden.
+// uploaded_by null bei employee → 403 (systemgeneriertes Dokument hat keinen Uploader).
+export function assertDocumentEditableByUser(
+  role: UserRole,
+  uploadedBy: string | null,
+  profileId: string
+): void {
+  if (role === "admin" || role === "manager") return;
+  if (uploadedBy !== profileId) {
+    throw ApiErrors.forbidden("Employees dürfen nur eigene Dokumente bearbeiten");
   }
 }
 

@@ -1010,6 +1010,117 @@ Manager darf alle Communications bearbeiten (anders als Notes — Communications
 
 ---
 
+## Block 16: Documents Metadata CRUD ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-16-Architekturplan Rev. 3
+
+### Neue Dateien (2)
+
+- [x] `src/app/api/leads/[id]/documents/route.ts` — GET + POST
+- [x] `src/app/api/leads/[id]/documents/[documentId]/route.ts` — PATCH + DELETE
+
+### Geänderte Dateien (2)
+
+- [x] `src/lib/validation/lead.ts` — CreateDocumentSchema, CreateDocumentInput, UpdateDocumentSchema, UpdateDocumentInput, MANUAL_DOCUMENT_TYPES
+- [x] `src/lib/api/guards.ts` — assertDocumentEditableByUser (neu); DOCUMENT_IMMUTABLE_FIELDS um document_type erweitert
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| GET | /api/leads/[id]/documents | Paginiert (Default 20), created_at DESC |
+| POST | /api/leads/[id]/documents | Metadaten registrieren, storage_path serverseitig |
+| PATCH | /api/leads/[id]/documents/[documentId] | file_name + OCR-Felder (Admin) |
+| DELETE | /api/leads/[id]/documents/[documentId] | Admin-only, 204 idempotent |
+
+### offer_pdf / contract_pdf Sperre
+
+POST und PATCH: nur `invoice`, `cancellation_confirmation`, `power_of_attorney`, `other` erlaubt.
+`offer_pdf` und `contract_pdf` sind für spätere systemgenerierte Prozesse reserviert (PDF-Pipeline, Contract-Pipeline).
+Zod gibt 422 wenn ein gesperrter Typ in POST gesendet wird.
+Im PATCH ist `document_type` vollständig immutable — 400 via assertDocumentImmutableFields.
+
+### storage_path Generierung (POST)
+
+Pfadschema: `{lead_id}/{document_type}/{documentId}.{ext}`
+
+- `documentId = crypto.randomUUID()` serverseitig generiert
+- Extension aus `file_name` (letzter Punkt) extrahiert, lowercase
+- Kein Punkt oder leere Extension → 422 "file_name muss eine Dateiendung enthalten"
+- Client gibt keinen `storage_path` an — nicht im Schema
+- `storage_bucket` nicht im Schema — DB DEFAULT `'documents'`
+
+### document_type Immutable-Regel
+
+`document_type` ist nach Erstellung unveränderlich.
+Begründung: `storage_path` kodiert `document_type` im Pfad. Ein PATCH würde Pfad und Typ dauerhaft auseinanderlaufen lassen.
+Korrekturen erfolgen via Delete + Re-POST.
+`assertDocumentImmutableFields` läuft auf rohem JSON VOR Zod-Parse — verhindert stilles Stripping.
+
+### PATCH-Guard-Reihenfolge
+
+1. `assertDocumentImmutableFields(raw)` → 400 (document_type, storage_path, storage_bucket, lead_id, uploaded_by)
+2. Zod → 422
+3. Empty-body → 400
+4. SELECT document → 404
+5. `assertDocumentEditableByUser(role, uploadedBy, profileId)` → 403 (Ownership)
+6. `assertDocumentFieldsByRole(role, raw)` → 403 (mime_type/file_size_bytes alle; ocr_* non-admin)
+
+assertDocumentFieldsByRole läuft auf `raw` (nicht `body`), damit mime_type/file_size_bytes 403 liefern,
+auch wenn sie durch Zod-Strip aus `body` verschwunden wären.
+
+### Rollenlogik
+
+| Aktion | employee (eigen) | employee (fremd) | manager | admin |
+|--------|-----------------|-----------------|---------|-------|
+| GET | ✓ | ✓ | ✓ (alle) | ✓ (alle) |
+| POST | ✓ (uploaded_by = self) | — | ✓ | ✓ |
+| PATCH file_name | ✓ | ✗ 403 | ✓ | ✓ |
+| PATCH ocr_* | ✗ 403 | ✗ 403 | ✗ 403 | ✓ |
+| PATCH document_type | ✗ 400 | ✗ 400 | ✗ 400 | ✗ 400 |
+| PATCH mime_type/file_size_bytes | ✗ 403 | ✗ 403 | ✗ 403 | ✗ 403 |
+| DELETE | ✗ 403 | ✗ 403 | ✗ 403 | ✓ |
+
+### Sicherheitsregeln
+
+- lead_id immer aus URL, nie aus Body
+- uploaded_by immer aus auth.profileId, nie aus Body
+- storage_path serverseitig generiert — kein Cross-Path-Risiko
+- document_type immutable — Pfad-Konsistenz dauerhaft garantiert
+- kein adminClient, kein RPC, keine Migration
+
+### Technische Schuld (bekannt)
+
+**Storage-Orphan bei DELETE:**
+`DELETE` entfernt nur den DB-Metadaten-Eintrag. Die Datei im Supabase Storage Bucket bleibt.
+`offers.pdf_document_id → documents(id) ON DELETE SET NULL` wird automatisch gehandhabt (FK).
+Storage-Cleanup (Datei aus Bucket löschen vor DB-DELETE) folgt im späteren Upload/Storage-Block.
+
+### Entscheidungen
+
+- kein adminClient, kein RPC, keine Migration
+- Lead-Gate im POST (wie Block 15): PGRST116 → 404, kein falsches 422
+- DELETE idempotent: 204 auch bei 0 rows
+- Extension-Validation: syntaktisch (letzter Punkt); keine MIME-vs-Extension-Konsistenzprüfung
+
+### Nicht in Block 16 (bewusst ausgelassen)
+
+- Supabase Storage Upload / Download
+- Signed URLs
+- PDF-Generierung (offer_pdf, contract_pdf)
+- OCR-Worker-Integration
+- PATCH offers.pdf_document_id
+- E-Mail-Versand, Automationen
+- Frontend/UI
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
 ## Block 14b: Offer Status Workflow ✓
 
 Abgeschlossen: 2026-06-17

@@ -193,3 +193,42 @@ export const UpdateCommunicationSchema = z.object({
 });
 
 export type UpdateCommunicationInput = z.infer<typeof UpdateCommunicationSchema>;
+
+// Für POST /api/leads/[id]/documents
+// offer_pdf + contract_pdf sind für systemgenerierte Prozesse reserviert — nicht im Enum.
+// storage_path wird serverseitig generiert: {lead_id}/{document_type}/{documentId}.{ext}
+// storage_bucket nicht im Schema — DB DEFAULT 'documents'.
+// uploaded_by, lead_id: serverseitig aus auth.profileId / URL.
+export const MANUAL_DOCUMENT_TYPES = [
+  "invoice",
+  "cancellation_confirmation",
+  "power_of_attorney",
+  "other",
+] as const;
+
+export const CreateDocumentSchema = z.object({
+  document_type:   z.enum(MANUAL_DOCUMENT_TYPES),
+  file_name:       z.string().min(1).max(500),
+  mime_type:       z.string().max(100).nullable().optional(),
+  file_size_bytes: z.number().int().min(0).nullable().optional(),
+});
+
+export type CreateDocumentInput = z.infer<typeof CreateDocumentSchema>;
+
+// Für PATCH /api/leads/[id]/documents/[documentId]
+// document_type ist immutable nach Erstellung (storage_path encodiert document_type im Pfad).
+// Patchbar: file_name, ocr_status, ocr_text, ocr_processed_at.
+// ocr_* nur Admin — assertDocumentFieldsByRole erzwingt das.
+// Nicht im Schema: document_type, storage_path, storage_bucket, lead_id, uploaded_by, mime_type, file_size_bytes.
+export const UpdateDocumentSchema = z.object({
+  file_name:        z.string().min(1).max(500).optional(),
+  ocr_status:       z.string().max(100).nullable().optional(),
+  ocr_text:         z.string().nullable().optional(),
+  ocr_processed_at: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/, "Ungültiges ISO-Datumsformat")
+    .nullable()
+    .optional(),
+});
+
+export type UpdateDocumentInput = z.infer<typeof UpdateDocumentSchema>;
