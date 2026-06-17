@@ -347,10 +347,11 @@ export type Database = {
       };
       change_lead_status: {
         Args: {
-          p_lead_id: string;
-          p_new_status: string;
-          p_changed_by: string;
-          p_reason?: string | null;
+          p_lead_id:         string;
+          p_new_status:      string;
+          p_changed_by:      string;
+          p_reason?:         string | null;
+          p_expected_status?: string | null;
         };
         Returns: Array<{ lead_id: string; old_status: string; new_status: string }>;
       };

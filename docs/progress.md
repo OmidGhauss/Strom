@@ -1617,3 +1617,120 @@ Identisch Block 18: Upload-then-Commit.
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 21: Contract Email Sending (Auftragsbestätigung-Versand) ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-21-Architekturplan Rev. 3
+
+### Neue Migration
+
+- [x] `supabase/migrations/20260620000001_block21_change_lead_status_cas.sql`
+  - DROP 4-Parameter-Signatur `change_lead_status(uuid, lead_status, uuid, text)`
+  - CREATE neue 5-Parameter-Signatur mit `p_expected_status lead_status DEFAULT NULL`
+  - FOR UPDATE Lock auf Lead-Zeile (fehlte in Block 11 — jetzt ergänzt)
+  - CAS-Check: `IF p_expected_status IS NOT NULL AND v_old_status != p_expected_status → LEAD_STATUS_MISMATCH`
+  - Backward-kompatibel: bestehende Aufrufer ohne p_expected_status → NULL → kein CAS-Check
+  - REVOKE/GRANT auf neue 5-Parameter-Signatur
+  - **Deployment-Hinweis:** nach Migration ggf. Supabase/PostgREST Schema-Cache reloaden;
+    Smoke-Test: `PATCH /api/leads/[id]/status` (bestehend) + `POST /contract/send` (neu)
+
+### Neue Dateien (3)
+
+- [x] `src/lib/email/contract-email.ts` — `buildContractEmailHtml(offer, lead, message, companyName)`
+  - `escapeHtml` importiert aus `offer-email.ts`; alle dynamischen Werte escaped
+  - message: `escapeHtml` + `\n → <br />`
+  - Text: "Ihre Auftragsbestätigung", Intro "vielen Dank für Ihren Auftrag"
+  - Tabellenspalte 1: "Bestätigung zu Angebot X (Version Y)"
+- [x] `src/app/api/leads/[id]/offers/[offerId]/contract/send/route.ts` — POST-Flow
+- [x] (neu in guards.ts) `assertContractSendable`
+
+### Geänderte Dateien (4)
+
+- [x] `src/lib/api/guards.ts` — `assertContractSendable(role, status)` ergänzt
+- [x] `src/lib/validation/lead.ts` — `SendContractEmailSchema`, `SendContractEmailInput`
+- [x] `src/lib/api/errors.ts` — P0001 `LEAD_STATUS_MISMATCH` → 409 (globales Mapping)
+- [x] `src/types/database.ts` — `change_lead_status` Args + `p_expected_status?: string | null`
+
+### Implementierter Endpoint
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| POST | /api/leads/[id]/offers/[offerId]/contract/send | Auftragsbestätigung per E-Mail versenden |
+
+### Route-Flow (Kurzfassung)
+
+```
+requireAuth → UUID → SELECT offer (RLS-Gate) → assertContractSendable
+→ contract_document_id-Check (422) → Body parse → SELECT lead
+→ Lead-Status-Gate (contract_prepared/contract_sent; sonst 409)
+→ recipientEmail (Manager/Admin: override; sonst lead.email)
+→ SELECT document → ENV-Check → adminClient (nach Gate)
+→ Storage download → INSERT comm_log (pending)
+→ resend.emails.send → Fehler: UPDATE failed + 502
+→ Erfolg: UPDATE success
+→ CAS: adminClient.rpc("change_lead_status", { p_expected_status: "contract_prepared" })
+→ 201 { communication_id, offer_id, recipient_email, lead_status_updated, warning? }
+```
+
+### Sicherheitsinvarianten
+
+- **Nur Manager/Admin:** Employee → 403 via `assertContractSendable` (vor DB-Zugriff)
+- **accepted-only:** superseded → 409; andere Statuse → 409 (Guard-Reihenfolge: superseded → status → role)
+- **Lead-Status-Gate:** Versand nur bei `contract_prepared` / `contract_sent`; alle anderen → 409
+- **createAdminClient()** ausschließlich nach positivem user-aware RLS-Gate
+- **RESEND_API_KEY/RESEND_FROM_EMAIL:** niemals NEXT_PUBLIC_; ENV-Check vor adminClient
+- **HTML-Escaping:** alle dynamischen Werte in `buildContractEmailHtml` via `escapeHtml`
+
+### Lead-Status-CAS (echter CAS via p_expected_status)
+
+```
+lead.status === "contract_prepared":
+  → RPC change_lead_status({ p_expected_status: "contract_prepared", p_new_status: "contract_sent" })
+  → Erfolg: lead_status_updated: true
+  → LEAD_STATUS_MISMATCH (Race): lead_status_updated: false, warning: { reason: "cas_mismatch" }
+  → Anderer Fehler: lead_status_updated: false, warning: { reason: "lead_status_update_failed" }
+
+lead.status === "contract_sent" (Re-Send):
+  → kein RPC-Call
+  → lead_status_updated: false, warning: { reason: "already_contract_sent" }
+```
+
+### LEAD_STATUS_MISMATCH Doppel-Semantik
+
+| Aufrufer | Verhalten |
+|----------|-----------|
+| Beliebiger Endpoint via `handleSupabaseError()` | 409 Conflict |
+| `/contract/send` (inline abgefangen) | 201 + `warning: { reason: "cas_mismatch" }` |
+
+Begründung: E-Mail bereits zugestellt → 409 wäre irreführend und könnte Client-Retries (→ Duplikat-E-Mail) auslösen.
+
+### Warning-Reasons
+
+| reason | Bedeutung |
+|--------|-----------|
+| `already_contract_sent` | Re-Send; Lead war bereits `contract_sent` — kein CAS-Call |
+| `cas_mismatch` | `LEAD_STATUS_MISMATCH` im RPC — Lead-Status zwischen Gate und CAS geändert |
+| `lead_status_update_failed` | Anderer RPC-Fehler — Lead-Status-Update fehlgeschlagen |
+
+### Bewusst NICHT enthalten
+
+- Kein automatisches Lead-Status-Update wenn Lead nicht in `contract_prepared`
+- Kein CC/BCC
+- Kein Versandlimit pro Offer
+- Kein Resend-Webhook für Delivery-Tracking
+- Kein Contract-Versioning
+- Kein Frontend/UI
+
+### Technische Schuld
+
+- Lead muss manuell auf `contract_prepared` gesetzt werden (via PATCH /status) vor Contract-Send
+- `lead_status_history` enthält keinen Audit-Trail warum Lead-Status-Update nicht erfolgte
+- CAS-Fenster zwischen Gate-Check und RPC-Call (minimales Race-Risiko; durch FOR UPDATE im RPC abgesichert)
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler

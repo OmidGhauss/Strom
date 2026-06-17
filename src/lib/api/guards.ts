@@ -257,6 +257,29 @@ export function assertOfferSendable(
   }
 }
 
+// Section 21: Auftragsbestätigungs-Versand per E-Mail.
+// Reihenfolge analog Block 20: superseded → status ≠ accepted → role.
+// Nur Manager/Admin — Symmetrie mit assertContractGenerationAllowed.
+// accepted ist Terminal-Status: kein Re-Send-Problem auf Offer-Ebene.
+// Lead-Status-Gate (contract_prepared / contract_sent) liegt in der Route nach Lead-SELECT.
+export function assertContractSendable(role: UserRole, status: string): void {
+  if (status === "superseded") {
+    throw ApiErrors.conflict(
+      "Superseded Angebote können keine Auftragsbestätigung versenden"
+    );
+  }
+  if (status !== "accepted") {
+    throw ApiErrors.conflict(
+      "Auftragsbestätigung kann nur für accepted Angebote versendet werden"
+    );
+  }
+  if (role === "employee") {
+    throw ApiErrors.forbidden(
+      "Nur Manager und Admin dürfen Auftragsbestätigungen versenden"
+    );
+  }
+}
+
 // Section 20: Auftragsbestätigungs-PDF-Generierung (technisch: contract_pdf).
 // Nur Manager/Admin — Employee kann accepted nie setzen.
 // accepted-only: kein Contract für draft/sent/rejected/expired/superseded.

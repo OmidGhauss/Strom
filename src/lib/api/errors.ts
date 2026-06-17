@@ -80,6 +80,11 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
         return ApiErrors.unprocessable("Ungültiger Contract-Storage-Pfad");
       if (error.message === "INVALID_CONTRACT_FILE_SIZE")
         return ApiErrors.unprocessable("Ungültige Contract-Dateigröße");
+      // LEAD_STATUS_MISMATCH: globales Mapping → 409.
+      // AUSNAHME: /contract/send fängt diesen Fehler lokal ab und gibt 201 + warning zurück,
+      // weil die E-Mail bereits zugestellt wurde. handleSupabaseError wird dort nicht aufgerufen.
+      if (error.message === "LEAD_STATUS_MISMATCH")
+        return ApiErrors.conflict("Lead-Status wurde zwischenzeitlich geändert");
       return ApiErrors.unprocessable("Anfrage konnte nicht verarbeitet werden");
     case "23502": // not_null_violation
       return ApiErrors.unprocessable("Pflichtfeld fehlt");

@@ -263,3 +263,15 @@ export const SendOfferEmailSchema = z.object({
 });
 
 export type SendOfferEmailInput = z.infer<typeof SendOfferEmailSchema>;
+
+// Für POST /api/leads/[id]/offers/[offerId]/contract/send
+// recipient_email: nur Manager/Admin (Employee ist ohnehin 403 via assertContractSendable).
+// Alle Felder optional — leerer Body ist valide (defaults greifen in der Route).
+// Bewusst separate Schema-Definition für unabhängige Weiterentwicklung.
+export const SendContractEmailSchema = z.object({
+  recipient_email: z.string().email().optional(),
+  subject:         z.string().min(1).max(500).optional(),
+  message:         z.string().max(5000).nullable().optional(),
+});
+
+export type SendContractEmailInput = z.infer<typeof SendContractEmailSchema>;
