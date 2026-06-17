@@ -108,6 +108,24 @@ export function assertNoteEditableByUser(
   }
 }
 
+// Section 14: Offer darf nur bearbeitet werden wenn:
+//   1. status === "draft" (alle Rollen)
+//   2. employee: nur eigene Offers (created_by === profileId)
+//   manager/admin: dürfen alle draft-Offers bearbeiten
+export function assertOfferEditableByUser(
+  role: UserRole,
+  createdBy: string | null,
+  profileId: string,
+  status: string
+): void {
+  if (status !== "draft") {
+    throw ApiErrors.conflict("Nur draft-Angebote dürfen bearbeitet werden");
+  }
+  if (role === "employee" && createdBy !== profileId) {
+    throw ApiErrors.forbidden("Employees dürfen nur eigene Angebote bearbeiten");
+  }
+}
+
 // Section 3: Superseded-Angebote dürfen nicht akzeptiert werden.
 export function assertOfferNotSuperseded(
   currentStatus: string,

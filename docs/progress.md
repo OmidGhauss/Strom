@@ -768,3 +768,82 @@ Plan: Block-13-Architekturplan Rev. 1
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 14: Offers CRUD V1 ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-14-Architekturplan Rev. 2
+
+### Neue Dateien (2)
+
+- [x] `src/app/api/leads/[id]/offers/route.ts` — GET + POST
+- [x] `src/app/api/leads/[id]/offers/[offerId]/route.ts` — PATCH
+
+### Geänderte Dateien (2)
+
+- [x] `src/lib/validation/lead.ts` — CreateOfferSchema, CreateOfferInput, UpdateOfferSchema, UpdateOfferInput
+- [x] `src/lib/api/guards.ts` — assertOfferEditableByUser
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| GET | /api/leads/[id]/offers | Offers paginiert (absteigend created_at, Default 20) |
+| POST | /api/leads/[id]/offers | Offer erstellen (status=draft, created_by serverseitig) |
+| PATCH | /api/leads/[id]/offers/[offerId] | Draft-Offer bearbeiten |
+
+### Sicherheitslogik
+
+- `requireAuth()` als erster Schritt in jedem Handler
+- UUID-Validierung für `id` (alle) und `offerId` (PATCH) vor DB-Zugriff
+- User-aware Client für alle Queries — kein adminClient, kein RPC
+- `created_by` immer aus `auth.profileId`, `status` immer `"draft"`, `lead_id` immer aus URL
+- `version` nicht explizit gesetzt — DB DEFAULT 1
+- GET: unzugänglicher Lead → leere Liste (kein Info-Leak)
+- POST: RLS INSERT (`can_access_lead`) als Gate — kein separates Lead-Gate
+- PATCH: Offer lesen → assertOfferEditableByUser → effektiven Zielzustand berechnen → Konsistenzcheck → UPDATE
+- `.eq("id", offerId).eq("lead_id", id)` in allen offerId-Queries → kein Cross-Lead-Zugriff
+
+### Guard-Logik (assertOfferEditableByUser)
+
+| Bedingung | Ergebnis |
+|-----------|----------|
+| status ≠ draft (alle Rollen) | 409 Conflict |
+| employee, eigene Offer (created_by = profileId) | ✓ |
+| employee, fremde Offer | 403 Forbidden |
+| manager/admin, draft-Offer | ✓ |
+
+### energy_demand_id + energy_type Validierung
+
+POST (wenn energy_demand_id != null):
+- SELECT energy_demands WHERE id = energy_demand_id AND lead_id = id
+- 0 rows → 422 "energy_demand_id gehört nicht zu diesem Lead"
+- energy_demand.energy_type ≠ body.energy_type → 422 "energy_demand_id passt nicht zu energy_type"
+
+PATCH (effektiver Zielzustand, wenn effectiveEnergyDemandId !== null):
+- effectiveEnergyType = body.energy_type ?? offer.energy_type
+- effectiveEnergyDemandId = "energy_demand_id" in body ? body.energy_demand_id : offer.energy_demand_id
+- Prüfung auch wenn weder energy_type noch energy_demand_id geändert werden (Drift-Erkennung)
+- energy_demand_id: null im Body → kein Check, Wert wird auf null gesetzt
+
+### Entscheidungen
+
+- Status-Endpoint (draft→sent etc.) → Block 14b
+- Versioning (parent_offer_id, version++) → Block 14c
+- DELETE → kein Endpoint (RLS admin-only als DB-Absicherung vorhanden)
+- estimated_savings ohne min(0) — negative Werte semantisch erlaubt
+- Bestehende Drift bei PATCH immer geprüft (Korrektheit vor Komfort)
+
+### Nicht in Block 14 (bewusst ausgelassen)
+
+- PATCH /status (Statuswechsel-Endpoint) → Block 14b
+- Offer Versioning → Block 14c
+- PDF-Generierung, E-Mail-Versand → später
+- DELETE Offer → später
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
