@@ -27,11 +27,21 @@ export async function requireAuth(): Promise<AuthContext> {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, role")
+    .select("id, role, is_active")
     .eq("auth_user_id", user.id)
     .single();
 
   if (profileError || !profile) {
+    throw ApiErrors.unauthorized();
+  }
+
+  // Schicht 1 (App): Deaktivierte Nutzer explizit ablehnen.
+  // Nach der Block-22-Migration liefert die "profiles: select own row" RLS-Policy
+  // für inaktive User bereits 0 Zeilen (→ profileError/!profile oben greift).
+  // Dieser explizite Check dient als Defense-in-depth, konsistentem 401-Verhalten
+  // und Server-Logging — unabhängig davon, ob RLS bereits blockiert hat.
+  if (!profile.is_active) {
+    console.error("[auth] Blocked inactive profile", { profileId: profile.id });
     throw ApiErrors.unauthorized();
   }
 

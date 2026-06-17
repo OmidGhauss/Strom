@@ -1734,3 +1734,98 @@ Begründung: E-Mail bereits zugestellt → 409 wäre irreführend und könnte Cl
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 22: Auth Hardening + is_active Enforcement ✓
+
+Abgeschlossen: 2026-06-18
+
+Plan: Block-22-Architekturplan Rev. 2
+
+### Neue Migration
+
+- [x] `supabase/migrations/20260621000001_block22_is_active_enforcement.sql`
+  - `current_profile_id()` — `AND is_active = true` ergänzt (Kaskade: is_admin, is_manager_or_above, can_access_lead erben)
+  - `current_user_role()` — `AND is_active = true` ergänzt (Kaskade: analog)
+  - `"profiles: select own row"` — DROP + CREATE mit `AND is_active = true` in USING
+  - `"profiles: select all rows for manager and admin"` bewusst unverändert (aktive Admins müssen inaktive Profile sehen)
+
+### Geänderte Dateien (1)
+
+- [x] `src/lib/api/auth.ts`
+  - `select("id, role, is_active")` statt `select("id, role")`
+  - `if (!profile.is_active) → console.error + throw ApiErrors.unauthorized()`
+
+### Drei-Schichten-Modell
+
+```
+Schicht 1 (App):  requireAuth() → !profile.is_active → 401
+                  Defense-in-depth + klare Semantik + Server-Logging
+
+Schicht 2 (DB):   current_profile_id() / current_user_role() → AND is_active = true
+                  Kaskade auf alle abhängigen RLS-Policies + RPCs
+
+Schicht 3 (DB):   "profiles: select own row" → AND is_active = true
+                  Inaktiver User → 0 Zeilen → profileError/!profile → 401
+```
+
+### Fehlersemantik (präzise)
+
+| Zugriffspfad | Verhalten nach Block 22 |
+|-------------|------------------------|
+| API-Route via `requireAuth()` | HTTP 401 garantiert |
+| Direkte PostgREST-Aufrufe (authenticated JWT) | 0 Zeilen / leere Resultsets / PGRST116 — kein garantierter HTTP-Status |
+| `create_offer_version` RPC direkt (authenticated) | RLS auf `offers` → OFFER_NOT_FOUND oder 0 Zeilen — kein HTTP 401 |
+| `service_role` RPCs (adminClient) | Nur via API-Layer erreichbar → bereits durch requireAuth() geblockt |
+
+Block 22 garantiert 401 ausschließlich über den API-Layer. Direkte DB-Zugriffe liefern DB-konforme Fehler, kein HTTP 401.
+
+### Architekturannahme (dokumentiert)
+
+Bearer-Token-Support ist in `server.ts` vorbereitet, aber durch `proxy.ts` (Cookie-only) de facto blockiert. Bearer-Clients können den API-Layer nicht erreichen. Diese Inkonsistenz ist technische Schuld für einen späteren Block — unabhängig von Block 22.
+
+### Betriebsregel: Admin Self-Deaktivierung
+
+Vor Deaktivierung eines Admin-Accounts muss geprüft werden, ob mindestens ein weiterer aktiver Admin existiert (`SELECT id FROM profiles WHERE role = 'admin' AND is_active = true`). Reaktivierung ist nur über das Supabase Dashboard möglich.
+
+### Smoke-Tests
+
+1. User X deaktivieren (`is_active = false` via Dashboard)
+2. User X: `GET /api/leads` mit gültigem JWT → 401
+3. User X: `GET /api/me` → 401
+4. User X reaktivieren: `is_active = true`; `GET /api/leads` → 200 ✓
+5. Inaktiver Manager: `GET /api/leads` → 401 ✓
+6. Inaktiver Admin: `GET /api/leads` → 401 ✓
+7. Aktiver Admin: `SELECT * FROM profiles WHERE is_active = false` via PostgREST → inaktive Profile sichtbar ✓
+8. Inaktiver User: direkt `create_offer_version` RPC via authenticated Client → OFFER_NOT_FOUND oder leeres Ergebnis (kein HTTP 401 auf RLS-Ebene)
+9. User X mit gültigem JWT wird sofort geblockt: nächster Request nach `is_active = false` → 401 (kein Cache in requireAuth)
+
+### Was Block 22 löst / nicht löst
+
+| Szenario | Gelöst? |
+|----------|---------|
+| Inaktiver User via API-Routen | ✓ (401) |
+| Inaktiver User via direktem PostgREST | ✓ (0 Zeilen / RLS) |
+| Inaktiver User via `create_offer_version` RPC | ✓ (OFFER_NOT_FOUND / RLS) |
+| JWT/Refresh-Token-Revocation | ✗ (späterer Block) |
+| Business-Guards bei direktem PostgREST-Bypass | ✗ (pre-existing Architekturissue) |
+| Bearer-Token-Inkonsistenz | ✗ (späterer Block) |
+
+### Technische Schuld
+
+- JWT/Refresh-Token-Revocation via `supabase.auth.admin.signOut()` — späterer Block
+- Bearer-Token-Inkonsistenz (`server.ts` vs. `proxy.ts`) — späterer Block
+- `PATCH /api/profiles/[id]` für is_active-Management — späterer Block
+- Admin Self-Deaktivierungsschutz via DB-Trigger — wenn PATCH-Endpoint existiert
+- Audit-Trail für is_active-Änderungen — späterer Block
+
+### CAS-Referenz (Block 21)
+
+`change_lead_status` RPC hat seit Block 21 die Signatur:
+`change_lead_status(p_lead_id, p_new_status, p_changed_by, p_reason, p_expected_status)`
+Keine Referenzen mehr auf die historische 4-Parameter-Version.
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
