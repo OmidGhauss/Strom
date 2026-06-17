@@ -64,6 +64,10 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
         );
       if (error.message === "OFFER_FORBIDDEN")
         return ApiErrors.forbidden("Employees dürfen nur eigene Angebote versionieren");
+      if (error.message === "OLD_PDF_DOCUMENT_MISMATCH")
+        return ApiErrors.conflict(
+          "Bestehendes PDF-Dokument passt nicht zum Angebot"
+        );
       return ApiErrors.unprocessable("Anfrage konnte nicht verarbeitet werden");
     case "23502": // not_null_violation
       return ApiErrors.unprocessable("Pflichtfeld fehlt");

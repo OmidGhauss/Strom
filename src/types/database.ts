@@ -365,6 +365,21 @@ export type Database = {
           energy_types: string[];
         }>;
       };
+      register_offer_pdf: {
+        Args: {
+          p_offer_id:        string;
+          p_lead_id:         string;
+          p_new_document_id: string;
+          p_file_name:       string;
+          p_storage_path:    string;
+          p_file_size_bytes: number;
+        };
+        Returns: Array<{
+          document_id:        string;
+          old_storage_bucket: string | null;
+          old_storage_path:   string | null;
+        }>;
+      };
       create_offer_version: {
         Args: {
           p_lead_id:           string;

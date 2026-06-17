@@ -217,6 +217,25 @@ export function assertStatusTransitionAllowedForRole(
   }
 }
 
+// Section 18: PDF-Generierung für Offers.
+// superseded-Check vor Ownership-Check: kein Info-Leak ob Offer dem Employee gehört.
+// Erlaubte Statuse: draft, sent, accepted, rejected, expired.
+export function assertOfferPdfGenerationAllowed(
+  role: UserRole,
+  createdBy: string | null,
+  profileId: string,
+  status: string
+): void {
+  if (status === "superseded") {
+    throw ApiErrors.conflict("Superseded Angebote können kein PDF generieren");
+  }
+  if (role === "employee" && createdBy !== profileId) {
+    throw ApiErrors.forbidden(
+      "Employees dürfen nur PDFs für eigene Angebote generieren"
+    );
+  }
+}
+
 // Section 1: Employee-eigenes Profil: nur full_name erlaubt.
 const EMPLOYEE_PROFILE_WHITELIST = ["full_name"] as const;
 

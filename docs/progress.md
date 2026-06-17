@@ -1184,6 +1184,136 @@ Parallele Requests auf demselben Offer: erster schreibt durch, zweiter findet ke
 
 ---
 
+## Block 18: Offer PDF Generation ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-18-Architekturplan Rev. 2
+
+### Neue Dependency
+
+- `pdf-lib` ^1.17.1 — Pure-JS PDF-Generierung, kein nativer Binary, Node.js-kompatibel
+
+### Neue Dateien (3)
+
+- [x] `supabase/migrations/20260618000005_block18_register_offer_pdf_rpc.sql` — RPC register_offer_pdf
+- [x] `src/lib/pdf/offer-pdf.ts` — `generateOfferPdf(offer, lead): Promise<Uint8Array>`
+- [x] `src/app/api/leads/[id]/offers/[offerId]/pdf/route.ts` — POST, `runtime = "nodejs"`
+
+### Geänderte Dateien (4)
+
+- [x] `src/lib/api/guards.ts` — `assertOfferPdfGenerationAllowed`
+- [x] `src/lib/api/errors.ts` — P0001 `OLD_PDF_DOCUMENT_MISMATCH` → 409
+- [x] `src/types/database.ts` — `register_offer_pdf` in Functions
+- [x] `docs/progress.md` — Block 18 Eintrag
+
+### Implementierter Endpoint
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| POST | /api/leads/[id]/offers/[offerId]/pdf | PDF synchron generieren, in Storage hochladen, an Offer verknüpfen |
+
+### RPC: register_offer_pdf
+
+- SECURITY INVOKER, GRANT TO service_role, REVOKE FROM PUBLIC/anon/authenticated
+- Signatur: `(p_offer_id, p_lead_id, p_new_document_id, p_file_name, p_storage_path, p_file_size_bytes)`
+- Returns TABLE: `(document_id, old_storage_bucket, old_storage_path)`
+- Ablauf:
+  1. `SELECT * FROM offers WHERE id = p_offer_id AND lead_id = p_lead_id FOR UPDATE` → Race-Protection
+  2. `OFFER_NOT_FOUND` wenn not found → 404
+  3. `v_old_document_id := v_offer.pdf_document_id`
+  4. Wenn vorhanden: `DELETE FROM documents WHERE id = v_old_document_id AND lead_id = p_lead_id AND document_type = 'offer_pdf' RETURNING storage_bucket, storage_path`
+  5. `OLD_PDF_DOCUMENT_MISMATCH` wenn DELETE 0 rows → 409
+  6. `INSERT INTO documents` (uploaded_by = NULL, systemgeneriert)
+  7. `UPDATE offers SET pdf_document_id = p_new_document_id`
+  8. RETURN QUERY mit document_id + altem Storage-Ziel
+
+### offer_pdf-Dokument
+
+- `uploaded_by = NULL` — systemgeneriertes Dokument ohne menschlichen Uploader
+- `document_type = 'offer_pdf'` — für manuelle Uploads weiterhin gesperrt (MANUAL_DOCUMENT_TYPES unverändert)
+- `storage_path = {lead_id}/offer_pdf/{newDocumentId}.pdf`
+- `storage_bucket = 'documents'`
+- `mime_type = 'application/pdf'`
+
+### offers.pdf_document_id Update
+
+- Atomar via RPC: DELETE altes Dokument → `ON DELETE SET NULL` feuert → INSERT neu → UPDATE Offer
+- FK `offers.pdf_document_id → documents(id) ON DELETE SET NULL` gewährleistet Konsistenz
+- Kein Audit-Trail für ersetzte PDFs in V1
+
+### DB/Storage-Konsistenz
+
+```
+1. Storage upload neues PDF (Buffer.from(Uint8Array), upsert: false)
+   → Fehler: 500, kein DB-Side-Effect
+
+2. RPC atomar: DELETE old doc + INSERT new doc + UPDATE pdf_document_id
+   → RPC-Fehler: best-effort cleanup neues Storage-File → handleSupabaseError
+
+3. Storage delete altes File (best-effort, nach RPC-Erfolg)
+   Quelle: old_storage_path aus RPC-Return (nie aus Route-Parameter)
+   → Fehler: loggen, Orphan-File möglich, 201 trotzdem
+```
+
+### Erlaubte Offer-Statuse
+
+| Status | PDF generierbar? |
+|--------|-----------------|
+| draft, sent, accepted, rejected, expired | ✓ |
+| superseded | ✗ → 409 |
+
+### Rollenlogik
+
+- `employee`: nur eigene Offers (created_by === profileId) → sonst 403
+- `manager`, `admin`: alle erlaubten Statuse
+
+### PDF-Inhalt (V1, pdf-lib)
+
+A4-Layout, Helvetica, kein Logo, keine externen Bilder.
+Felder: offer_number, version, first_name + last_name, provider_name, tariff_name, energy_type, monthly_price, annual_price, estimated_savings, valid_until, Generierungsdatum.
+Null-Werte als „—". Preise im DE-Locale formatiert.
+
+### Neue P0001-Codes in errors.ts
+
+- `OFFER_NOT_FOUND` → 404 (existierte bereits aus Block 14c)
+- `OLD_PDF_DOCUMENT_MISMATCH` → 409 "Bestehendes PDF-Dokument passt nicht zum Angebot" (neu)
+
+### Sicherheitsregeln
+
+- `createAdminClient()` ausschließlich nach positivem user-aware RLS-Gate (Offer-Select)
+- `offer_pdf` für manuelle Uploads weiterhin gesperrt (MANUAL_DOCUMENT_TYPES unverändert)
+- old document deletion streng gescoped: `id + lead_id + document_type = 'offer_pdf'`
+- kein Trust-Parameter für altes Dokument — RPC liest pdf_document_id selbst aus gesperrtem Row
+
+### TypeScript-Hinweis
+
+Supabase-TypeScript-Inferenz ist bei langen Spaltenlisten mit manuell gepflegten Database-Typen instabil (GenericStringError). Lösung: `select("*")` im Route Handler — gibt den vollständigen `Row: Offer`-Typ zurück.
+
+### Bewusst NICHT in Block 18
+
+- E-Mail-Versand
+- Automatischer Offer-Statuswechsel (draft → sent)
+- communications_log-Eintrag
+- Lead-Adresse, Energy-Demand-Details im PDF
+- OCR des generierten PDFs
+- Signed URL in der Response (→ bestehender `/download-url`-Endpoint)
+- contract_pdf
+- Frontend/UI
+- Audit-Trail für ersetzte PDFs
+
+### Technische Schuld (bekannt)
+
+- PDF-Inhalt minimal: keine Adresse, kein Logo, keine rechtlichen Hinweise
+- Kein Audit-Trail wenn altes PDF-Dokument durch neue Generierung ersetzt wird
+- Altes Storage-File kann orphan bleiben wenn best-effort delete nach RPC-Erfolg scheitert
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
 ## Block 17: Document Storage / Upload & Download ✓
 
 Abgeschlossen: 2026-06-17
