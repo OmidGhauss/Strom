@@ -92,3 +92,19 @@ export const UpdateProductTypeSchema = z.object({
 });
 
 export type UpdateProductTypeInput = z.infer<typeof UpdateProductTypeSchema>;
+
+// Für POST /api/leads/[id]/notes
+// created_by ist kein Schema-Feld — immer serverseitig aus auth.profileId gesetzt.
+export const CreateNoteSchema = z.object({
+  note: z.string().min(1).max(10000),
+});
+
+export type CreateNoteInput = z.infer<typeof CreateNoteSchema>;
+
+// Für PATCH /api/leads/[id]/notes/[noteId]
+// note ist required — einziges patchbares Feld, leerer Body oder fehlendes note → 422.
+export const UpdateNoteSchema = z.object({
+  note: z.string().min(1).max(10000),
+});
+
+export type UpdateNoteInput = z.infer<typeof UpdateNoteSchema>;

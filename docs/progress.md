@@ -706,3 +706,65 @@ Plan: Block-12b-Architekturplan Rev. 3
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 13: Lead Notes CRUD ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-13-Architekturplan Rev. 1
+
+### Neue Dateien (2)
+
+- [x] `src/app/api/leads/[id]/notes/route.ts` — GET + POST
+- [x] `src/app/api/leads/[id]/notes/[noteId]/route.ts` — PATCH + DELETE
+
+### Geänderte Dateien (1)
+
+- [x] `src/lib/validation/lead.ts` — CreateNoteSchema, CreateNoteInput, UpdateNoteSchema, UpdateNoteInput
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| GET | /api/leads/[id]/notes | Notes paginiert (absteigend created_at) |
+| POST | /api/leads/[id]/notes | Note erstellen (created_by serverseitig) |
+| PATCH | /api/leads/[id]/notes/[noteId] | Note updaten (Autor/Admin) |
+| DELETE | /api/leads/[id]/notes/[noteId] | Note löschen (Autor/Admin) → 204 |
+
+### Sicherheitslogik
+
+- `requireAuth()` als erster Schritt in jedem Handler
+- UUID-Validierung für `id` (alle) und `noteId` (PATCH/DELETE) vor DB-Zugriff
+- User-aware Client für alle Queries — kein adminClient, kein RPC
+- `created_by` immer aus `auth.profileId`, nie aus dem Request-Body
+- GET: unzugänglicher Lead → leere Liste (kein Info-Leak)
+- POST: RLS INSERT (`can_access_lead`) reicht für V1 — kein separates Gate
+- PATCH/DELETE: Note zuerst lesen → `assertNoteEditableByUser` → UPDATE/DELETE
+- `.eq("id", noteId).eq("lead_id", id)` in allen noteId-Queries → kein Cross-Lead-Zugriff
+
+### Autorprüfung (assertNoteEditableByUser — bereits in guards.ts)
+
+| Rolle | PATCH/DELETE |
+|-------|-------------|
+| admin | immer erlaubt |
+| manager | immer 403 — auch eigene Notes |
+| employee | nur eigene Notes; fremde → 403 |
+
+### Entscheidungen
+
+- `note` (DB-Feld) konsequent verwendet — kein `content`
+- `note` max 10000 Zeichen in Zod (kein DB-Limit, Schutz vor großen Payloads)
+- DELETE gibt 204 zurück — bei TOCTOU (Note bereits gelöscht) gibt DELETE 0 rows ohne Fehler → 204 korrekt
+- RLS UPDATE/DELETE als Sicherheitsnetz hinter Guard
+
+### Nicht in Block 13 (bewusst ausgelassen)
+
+- GET /api/leads/[id]/notes/[noteId] (einzelne Note)
+- Bulk-Delete, Notes-Suche/Filter
+- Documents, Offers, Communications → spätere Blöcke
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
