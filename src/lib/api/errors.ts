@@ -56,6 +56,14 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
       if (error.message === "ENERGY_DEMANDS_PRODUCT_TYPE_MISMATCH") {
         return ApiErrors.unprocessable("Energiedaten passen nicht zum gewählten Produkttyp");
       }
+      if (error.message === "OFFER_NOT_FOUND")
+        return ApiErrors.notFound("Offer");
+      if (error.message === "OFFER_NOT_VERSIONABLE")
+        return ApiErrors.conflict(
+          "Offer kann nicht versioniert werden (Status nicht versionierbar)"
+        );
+      if (error.message === "OFFER_FORBIDDEN")
+        return ApiErrors.forbidden("Employees dürfen nur eigene Angebote versionieren");
       return ApiErrors.unprocessable("Anfrage konnte nicht verarbeitet werden");
     case "23502": // not_null_violation
       return ApiErrors.unprocessable("Pflichtfeld fehlt");

@@ -150,3 +150,20 @@ export const UpdateOfferStatusSchema = z.object({
 });
 
 export type UpdateOfferStatusInput = z.infer<typeof UpdateOfferStatusSchema>;
+
+// Für POST /api/leads/[id]/offers/[offerId]/version
+// Alle Felder optional — nicht angegebene werden von der alten Offer übernommen.
+// Ausnahme: valid_until und notes werden NICHT kopiert (default null).
+export const CreateOfferVersionSchema = z.object({
+  energy_demand_id:  z.string().uuid().nullable().optional(),
+  provider_name:     z.string().min(1).max(500).optional(),
+  tariff_name:       z.string().min(1).max(500).optional(),
+  energy_type:       z.enum(["electricity", "gas"]).optional(),
+  monthly_price:     z.number().min(0).nullable().optional(),
+  annual_price:      z.number().min(0).nullable().optional(),
+  estimated_savings: z.number().nullable().optional(),
+  valid_until:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datumsformat (YYYY-MM-DD)").nullable().optional(),
+  notes:             z.string().max(10000).nullable().optional(),
+});
+
+export type CreateOfferVersionInput = z.infer<typeof CreateOfferVersionSchema>;

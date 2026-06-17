@@ -850,6 +850,82 @@ PATCH (effektiver Zielzustand, wenn effectiveEnergyDemandId !== null):
 
 ---
 
+## Block 14c: Offer Versioning ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-14c-Architekturplan Rev. 2
+
+### Neue Dateien (2)
+
+- [x] `supabase/migrations/20260618000003_block14c_create_offer_version_rpc.sql`
+- [x] `src/app/api/leads/[id]/offers/[offerId]/version/route.ts` — POST
+
+### Geänderte Dateien (4)
+
+- [x] `src/lib/validation/lead.ts` — CreateOfferVersionSchema, CreateOfferVersionInput
+- [x] `src/lib/api/errors.ts` — P0001: OFFER_NOT_FOUND, OFFER_NOT_VERSIONABLE, OFFER_FORBIDDEN
+- [x] `src/types/database.ts` — create_offer_version Functions-Eintrag
+- [x] `docs/progress.md` — Block 14c Eintrag
+
+### Implementierter Endpoint
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| POST | /api/leads/[id]/offers/[offerId]/version | Neue draft-Version erstellen |
+
+### Versioning-Semantik
+
+- Versionierbare Statuse: `sent`, `rejected`, `expired`
+- Nicht versionierbar: `draft` (→ PATCH), `accepted`, `superseded` → 409
+- Alte Offer: `status = superseded`
+- Neue Offer: `status = draft`, `parent_offer_id = alte Offer`, `version = alte + 1`
+- Feldauflösung: body override > alte Offer; `valid_until` und `notes` default null (nicht kopiert)
+- parent_offer_id = direkter Vorgänger (Linked-List-Modell)
+
+### Migration / RPC
+
+- `create_offer_version` — SECURITY INVOKER, GRANT TO authenticated (kein service_role)
+- `FOR UPDATE` Lock auf alte Offer → verhindert parallele Doppel-Versionierungen
+- RPC prüft autoritativ: Status, Rolle/Ownership (`current_user_role()` + `current_profile_id()`)
+- `created_by` der neuen Offer = `current_profile_id()` (nicht aus Parameter)
+- P0001: OFFER_NOT_FOUND → 404, OFFER_NOT_VERSIONABLE → 409, OFFER_FORBIDDEN → 403
+
+### Security / RLS
+
+| Schicht | Prüfung |
+|---------|---------|
+| Route (fast-path) | UUID, Zod, status, employee ownership, energy_demand check |
+| RLS offers:select | can_access_lead — Offer für fremde Leads nicht sichtbar |
+| RLS offers:update | can_access_lead — supersede nur bei Lead-Zugriff |
+| RLS offers:insert | can_access_lead — neue Offer nur bei Lead-Zugriff |
+| RPC (autoritativ) | OFFER_NOT_FOUND, OFFER_NOT_VERSIONABLE, OFFER_FORBIDDEN |
+
+Kein adminClient. Kein service_role. User-aware createClient() ruft RPC auf.
+
+### Rollenregeln
+
+| Rolle | Eigene Offers (sent/rejected/expired) | Fremde Offers |
+|-------|---------------------------------------|---------------|
+| employee | ✓ | ✗ 403 |
+| manager | ✓ | ✓ |
+| admin | ✓ | ✓ |
+
+### Nicht in Block 14c (bewusst ausgelassen)
+
+- offer_status_history
+- PDF-Kopie / Neugenerierung
+- E-Mail-Versand
+- Renegotiation (accepted → neue Version)
+- Automatisches Superseden anderer Versions bei Acceptance
+- Admin Force Override
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
 ## Block 14b: Offer Status Workflow ✓
 
 Abgeschlossen: 2026-06-17

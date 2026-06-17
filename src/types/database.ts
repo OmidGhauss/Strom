@@ -365,6 +365,22 @@ export type Database = {
           energy_types: string[];
         }>;
       };
+      create_offer_version: {
+        Args: {
+          p_lead_id:           string;
+          p_offer_id:          string;
+          p_energy_demand_id:  string | null;
+          p_provider_name:     string;
+          p_tariff_name:       string;
+          p_energy_type:       string;
+          p_monthly_price:     number | null;
+          p_annual_price:      number | null;
+          p_estimated_savings: number | null;
+          p_valid_until:       string | null;
+          p_notes:             string | null;
+        };
+        Returns: Array<{ new_offer_id: string; new_version: number }>;
+      };
     };
     Enums: {
       user_role: UserRole;
