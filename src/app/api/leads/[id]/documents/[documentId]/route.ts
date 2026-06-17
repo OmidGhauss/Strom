@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import * as z from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAuth } from "@/lib/api/auth";
 import type { AuthContext } from "@/lib/api/auth";
 import { ApiErrors, handleSupabaseError } from "@/lib/api/errors";
@@ -12,6 +13,18 @@ import {
 } from "@/lib/api/guards";
 import { UuidSchema } from "@/lib/validation/common";
 import { UpdateDocumentSchema } from "@/lib/validation/lead";
+
+// Erkennt "not found" im Storage-Fehler (404 oder bekannte Meldungen).
+// StorageError.status ist number | undefined, statusCode ist string | undefined.
+function isStorageNotFound(error: {
+  status?: number;
+  statusCode?: string;
+  message: string;
+}): boolean {
+  if (error.status === 404 || error.statusCode === "404") return true;
+  const msg = error.message.toLowerCase();
+  return msg.includes("not found") || msg.includes("does not exist");
+}
 
 // PATCH /api/leads/[id]/documents/[documentId]
 //
@@ -105,9 +118,13 @@ export async function PATCH(
 
 // DELETE /api/leads/[id]/documents/[documentId]
 // Admin-only. RLS (is_admin()) als Sicherheitsnetz.
-// Idempotent: 204 auch wenn 0 Rows.
-// Technische Schuld: Storage-Datei wird NICHT gelöscht — nur DB-Metadaten.
-// Storage-Cleanup folgt im späteren Upload/Storage-Block.
+//
+// Reihenfolge: Storage-Cleanup zuerst, dann DB-Delete.
+// Storage-Fehler blockiert DB-Delete (kein Orphan-File ohne Pointer).
+// Ausnahme: "not found" im Storage → DB-Delete trotzdem (Datei nie hochgeladen).
+// Idempotent: Dokument bereits weg (PGRST116 bei SELECT) → 204.
+//
+// adminClient wird AUSSCHLIESSLICH nach positivem user-aware RLS-Gate aufgerufen.
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; documentId: string }> }
@@ -129,12 +146,42 @@ export async function DELETE(
 
   const supabase = await createClient();
 
-  const { error } = await supabase
+  // Dokument lesen: storage_path für Storage-Cleanup.
+  const { data: doc, error: readError } = await supabase
+    .from("documents")
+    .select("id, storage_path, storage_bucket")
+    .eq("id", documentId)
+    .eq("lead_id", id)
+    .single();
+
+  if (readError?.code === "PGRST116") return noContentResponse(); // idempotent
+  if (readError) return handleSupabaseError(readError);
+
+  // Storage-Cleanup vor DB-Delete — verhindert Orphan-Files ohne DB-Pointer.
+  // adminClient erst nach positivem Gate.
+  const adminClient = createAdminClient();
+  const { error: storageError } = await adminClient.storage
+    .from(doc.storage_bucket)
+    .remove([doc.storage_path]);
+
+  if (storageError) {
+    if (!isStorageNotFound(storageError)) {
+      // Echter Storage-Fehler: DB-Delete NICHT ausführen.
+      console.error("[storage:remove]", { message: storageError.message });
+      return Response.json(
+        { error: "Storage-Datei konnte nicht gelöscht werden", code: "STORAGE_ERROR" },
+        { status: 500 }
+      );
+    }
+    // "not found": Datei war nie hochgeladen oder schon weg → DB-Delete fortsetzen.
+  }
+
+  const { error: deleteError } = await supabase
     .from("documents")
     .delete()
     .eq("id", documentId)
     .eq("lead_id", id);
 
-  if (error) return handleSupabaseError(error);
+  if (deleteError) return handleSupabaseError(deleteError);
   return noContentResponse();
 }

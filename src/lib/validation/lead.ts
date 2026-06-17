@@ -232,3 +232,23 @@ export const UpdateDocumentSchema = z.object({
 });
 
 export type UpdateDocumentInput = z.infer<typeof UpdateDocumentSchema>;
+
+// Für POST /api/leads/[id]/documents/[documentId]/upload-url
+// mime_type/file_size_bytes sind client-provided und unverifiziert.
+// Bucket-Limits erzwingen echte Einschränkungen beim tatsächlichen Upload.
+export const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/tiff",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+] as const;
+
+export const UploadUrlRequestSchema = z.object({
+  mime_type:       z.enum(ALLOWED_MIME_TYPES).optional(),
+  file_size_bytes: z.number().int().min(0).max(10485760).optional(),
+});
+
+export type UploadUrlRequestInput = z.infer<typeof UploadUrlRequestSchema>;

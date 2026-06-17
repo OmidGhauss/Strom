@@ -1181,3 +1181,132 @@ Parallele Requests auf demselben Offer: erster schreibt durch, zweiter findet ke
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 17: Document Storage / Upload & Download ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-17-Architekturplan Rev. 2 (Option B: Signed Upload URL)
+
+### Neue Dateien (3)
+
+- [x] `supabase/migrations/20260618000004_block17_storage_bucket.sql` — privater Bucket `documents`
+- [x] `src/app/api/leads/[id]/documents/[documentId]/upload-url/route.ts` — POST
+- [x] `src/app/api/leads/[id]/documents/[documentId]/download-url/route.ts` — GET
+
+### Geänderte Dateien (2)
+
+- [x] `src/lib/validation/lead.ts` — ALLOWED_MIME_TYPES, UploadUrlRequestSchema, UploadUrlRequestInput
+- [x] `src/app/api/leads/[id]/documents/[documentId]/route.ts` — DELETE mit Storage-Cleanup erweitert; isStorageNotFound-Helper; createAdminClient-Import
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| POST | /api/leads/[id]/documents/[documentId]/upload-url | Signed Upload URL erzeugen |
+| GET | /api/leads/[id]/documents/[documentId]/download-url | Signed Download URL (3600s) |
+
+### Storage Bucket (Migration)
+
+Bucket `documents`: privat, kein Public-Zugriff.
+`file_size_limit = 10485760` (10 MB) — Supabase Storage erzwingt serverseitig.
+`allowed_mime_types`: application/pdf, image/jpeg, image/png, image/webp, image/tiff, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document.
+`ON CONFLICT DO NOTHING` — idempotent.
+
+### Upload-URL Endpoint (POST)
+
+1. `requireAuth()` → profileId, role
+2. UUID-Prüfung
+3. `request.text()` → conditional `JSON.parse` (leerer Body = `{}` erlaubt)
+4. Zod `UploadUrlRequestSchema` → 422
+5. user-aware SELECT (id, document_type, storage_path, storage_bucket, uploaded_by)
+6. PGRST116 → 404
+7. `MANUAL_DOCUMENT_TYPES.includes(doc.document_type)` → 403 bei offer_pdf/contract_pdf
+8. `assertDocumentEditableByUser` → 403 (Ownership)
+9. Optional: user-aware UPDATE mime_type/file_size_bytes (upload-spezifisch, kein assertDocumentFieldsByRole-Guard)
+10. adminClient nach positivem Gate
+11. `createSignedUploadUrl(path, { upsert: true })` → Response: `{ signedUrl, token, path }`
+12. Storage-Fehler → 500
+
+### offer_pdf / contract_pdf Sperre
+
+`upload-url` auf `MANUAL_DOCUMENT_TYPES` beschränkt.
+`offer_pdf`/`contract_pdf` → 403 "Upload-URL kann nur für manuelle Dokumenttypen erstellt werden".
+Reserviert für systemgenerierte Prozesse (PDF-Pipeline, Contract-Pipeline).
+
+### Download-URL Endpoint (GET)
+
+1. `requireAuth()` (kein profileId/role nötig — alle Nutzer mit Lead-Zugriff via RLS dürfen downloaden)
+2. UUID-Prüfung
+3. user-aware SELECT (id, storage_path, storage_bucket)
+4. PGRST116 → 404
+5. adminClient nach positivem Gate
+6. `createSignedUrl(path, 3600)` → Response: `{ signedUrl, expiresIn: 3600 }`
+7. Storage-Fehler → 500
+
+Kein Ownership-Check — alle Nutzer mit Lead-Zugriff dürfen alle Dokumenttypen herunterladen.
+
+### Storage-first DELETE Pattern (DELETE-Erweiterung)
+
+Reihenfolge: Storage-Cleanup vor DB-Delete.
+
+```
+1. Dokument-SELECT (storage_path, storage_bucket)
+2. PGRST116 → 204 (idempotent — Dokument bereits weg)
+3. adminClient.storage.remove([storage_path])
+4. Echter Storage-Fehler → 500, DB-Delete BLOCKIERT (kein Orphan-File ohne Pointer)
+5. "not found" (status 404 / message) → weiter (Datei nie hochgeladen oder bereits gelöscht)
+6. DB-Delete
+7. 204
+```
+
+`isStorageNotFound`: prüft `error.status === 404 || error.statusCode === "404"` sowie message `.includes("not found") || .includes("does not exist")`.
+
+### Storage API (korrekte Signaturen aus @supabase/storage-js)
+
+- `createSignedUploadUrl(path, { upsert?: boolean })` → `{ data: { signedUrl, token, path }; error: null } | { data: null; error: StorageError }`
+  - Kein `expiresIn`-Parameter — Gültigkeit ist implementierungsseitig festgelegt
+  - `upsert: true` erlaubt Re-Upload zum gleichen Pfad (Netzwerk-Retry, letzter Upload gewinnt)
+- `createSignedUrl(path, expiresIn: number)` → `{ data: { signedUrl }; error: null } | { data: null; error: StorageError }`
+- `remove(paths: string[])` → `{ data: FileObject[]; error: null } | { data: null; error: StorageError }`
+- `StorageError`: `status: number | undefined`, `statusCode: string | undefined`, `message: string`
+
+### mime_type / file_size_bytes beim Upload-URL
+
+Felder sind optional im Body des upload-url Endpoints.
+Client-provided / unverifiziert — Bucket-Limits erzwingen echte Einschränkungen.
+Werden in die Document-Metadaten geschrieben, können durch spätere OCR/Storage-Verarbeitung überschrieben werden.
+`assertDocumentFieldsByRole` gilt für diesen Endpoint nicht (semantisch abweichender Kontext).
+
+### adminClient-Invariante
+
+`createAdminClient()` wird ausschließlich nach positivem user-aware RLS-Gate aufgerufen.
+Reihenfolge: `requireAuth()` → `createClient()` SELECT/RLS → `createAdminClient()` für Storage-Ops.
+
+### Technische Schuld (bekannt)
+
+**Orphan-Metadaten:** Document-Eintrag existiert auch wenn Datei nie hochgeladen wird.
+Cleanup-Mechanismus (z.B. Cron-Job für Dokumente ohne erfolgreichen Upload) ist nicht implementiert.
+`mime_type`/`file_size_bytes` vom Client sind unverifiziert — bei Sicherheitsanforderungen muss ein Post-Upload-Validierungsschritt folgen.
+
+### Entscheidungen
+
+- Option B (Signed Upload URL): kein Dateiinhalt durch API, kein Memory-/CPU-Druck auf dem Server
+- Kein RLS auf Storage — Supabase Storage RLS wäre Parallelstruktur zu RLS auf `documents`-Tabelle; Service Role über adminClient ist klarer
+- Download ohne Ownership-Check: Download ist eine Lese-Operation, kein Schreibzugriff; RLS auf `documents` reicht
+- 10 MB Limit in Bucket-Migration und Zod `file_size_bytes.max(10485760)` konsistent
+
+### Nicht in Block 17 (bewusst ausgelassen)
+
+- OCR-Worker-Integration (ocr_status, ocr_text, ocr_processed_at)
+- PDF-Generierung (offer_pdf, contract_pdf)
+- Storage-Cleanup bei Lead-Löschung (DSGVO)
+- Orphan-Metadaten-Cleanup (Dokument ohne Upload)
+- Post-Upload-Validierung (MIME vs. tatsächlicher Dateiinhalt)
+- Frontend/UI
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
