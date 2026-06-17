@@ -926,6 +926,90 @@ Kein adminClient. Kein service_role. User-aware createClient() ruft RPC auf.
 
 ---
 
+## Block 15: Communications Log CRUD ✓
+
+Abgeschlossen: 2026-06-17
+
+Plan: Block-15-Architekturplan Rev. 2
+
+### Neue Dateien (2)
+
+- [x] `src/app/api/leads/[id]/communications/route.ts` — GET + POST
+- [x] `src/app/api/leads/[id]/communications/[communicationId]/route.ts` — PATCH + DELETE
+
+### Geänderte Dateien (2)
+
+- [x] `src/lib/validation/lead.ts` — CreateCommunicationSchema, CreateCommunicationInput, UpdateCommunicationSchema, UpdateCommunicationInput
+- [x] `src/lib/api/guards.ts` — assertCommunicationEditableByUser
+
+### Implementierte Endpoints
+
+| Method | Pfad | Beschreibung |
+|--------|------|--------------|
+| GET | /api/leads/[id]/communications | Paginiert (Default 20), created_at DESC |
+| POST | /api/leads/[id]/communications | Manual entry, created_by serverseitig |
+| PATCH | /api/leads/[id]/communications/[communicationId] | status / content_summary / external_id |
+| DELETE | /api/leads/[id]/communications/[communicationId] | Admin-only, 204 idempotent |
+
+### system-Sperre
+
+`communication_type` im CreateCommunicationSchema: `z.enum(["email", "call", "sms"])`.
+`"system"` ist nicht erlaubt → Zod 422 bei manuellem POST.
+System-Einträge sind für spätere automatische Prozesse reserviert.
+
+### Lead-Gate (POST)
+
+Vor offer_id-Check und INSERT: `SELECT id FROM leads WHERE id = id .single()`.
+PGRST116 → 404 Lead (kein falsches 422 bei fehlendem Lead-Zugriff).
+Trennt Lead-Zugriffsfehler (404) von offer_id-Fehlern (422).
+
+### offer_id Cross-Lead-Check (POST)
+
+Wenn `body.offer_id != null`:
+`SELECT id FROM offers WHERE id = body.offer_id AND lead_id = id .single()`
+→ PGRST116 / !data → 422 "offer_id gehört nicht zu diesem Lead"
+Nur beim POST — offer_id ist nach Creation unveränderlich (nicht im UpdateCommunicationSchema).
+
+### Rollenlogik
+
+| Aktion | employee (eigen) | employee (fremd) | manager | admin |
+|--------|-----------------|-----------------|---------|-------|
+| GET | ✓ | ✓ | ✓ (alle) | ✓ (alle) |
+| POST | ✓ | — | ✓ | ✓ |
+| PATCH | ✓ | ✗ 403 | ✓ | ✓ |
+| DELETE | ✗ 403 | ✗ 403 | ✗ 403 | ✓ |
+
+Manager darf alle Communications bearbeiten (anders als Notes — Communications sind Team-Records).
+
+### Guard (assertCommunicationEditableByUser)
+
+- admin/manager → immer erlaubt
+- employee, eigene Communication (created_by === profileId) → erlaubt
+- employee, fremde / null created_by → 403
+
+### Entscheidungen
+
+- PATCH erlaubt nur: status, content_summary, external_id
+- Gesperrte Felder (PATCH): offer_id, communication_type, direction, subject, created_by
+- DELETE: 204 idempotent (auch bei 0 rows)
+- Kein adminClient, kein RPC, keine Migration
+
+### Nicht in Block 15 (bewusst ausgelassen)
+
+- E-Mail-/SMS-Versand
+- Webhook-Empfang (external_id Status-Updates)
+- Automatische system-Einträge bei Lead-Statuswechseln
+- system-type Schutz via service_role
+- Soft-Delete
+- Kommunikations-Templates
+- Frontend/UI
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
 ## Block 14b: Offer Status Workflow ✓
 
 Abgeschlossen: 2026-06-17

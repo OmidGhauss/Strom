@@ -126,6 +126,23 @@ export function assertOfferEditableByUser(
   }
 }
 
+// Section 15: Kommunikationseinträge sind Team-Records, kein persönliches Eigentum.
+// Manager dürfen alle Communications bearbeiten (anders als Notes).
+// Employee darf nur eigene (created_by === profileId).
+// created_by null bei Employee → 403 (null !== profileId).
+export function assertCommunicationEditableByUser(
+  role: UserRole,
+  createdBy: string | null,
+  profileId: string
+): void {
+  if (role === "admin" || role === "manager") return;
+  if (createdBy !== profileId) {
+    throw ApiErrors.forbidden(
+      "Employees dürfen nur eigene Kommunikationseinträge bearbeiten"
+    );
+  }
+}
+
 // Section 14b: Erlaubte Statusübergänge für Offers.
 // Terminal-Zustände (accepted/rejected/expired/superseded) haben keine erlaubten Zielzustände.
 // superseded ist nicht manuell setzbar (kommt mit Versioning).

@@ -167,3 +167,29 @@ export const CreateOfferVersionSchema = z.object({
 });
 
 export type CreateOfferVersionInput = z.infer<typeof CreateOfferVersionSchema>;
+
+// Für POST /api/leads/[id]/communications
+// communication_type "system" ist für automatische interne Prozesse reserviert.
+// Manuelle User-Einträge dürfen system nicht imitieren → system nicht im Enum.
+export const CreateCommunicationSchema = z.object({
+  offer_id:           z.string().uuid().nullable().optional(),
+  communication_type: z.enum(["email", "call", "sms"]),
+  direction:          z.enum(["inbound", "outbound", "internal"]),
+  subject:            z.string().max(500).nullable().optional(),
+  content_summary:    z.string().max(5000).nullable().optional(),
+  status:             z.enum(["pending", "success", "failed"]),
+  external_id:        z.string().max(500).nullable().optional(),
+});
+
+export type CreateCommunicationInput = z.infer<typeof CreateCommunicationSchema>;
+
+// Für PATCH /api/leads/[id]/communications/[communicationId]
+// Gesperrte Felder: lead_id, offer_id, communication_type, direction, subject, created_by.
+// Nur die DB-typisierten Update-Felder sind erlaubt.
+export const UpdateCommunicationSchema = z.object({
+  status:          z.enum(["pending", "success", "failed"]).optional(),
+  content_summary: z.string().max(5000).nullable().optional(),
+  external_id:     z.string().max(500).nullable().optional(),
+});
+
+export type UpdateCommunicationInput = z.infer<typeof UpdateCommunicationSchema>;
