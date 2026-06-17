@@ -68,6 +68,18 @@ export function handleSupabaseError(error: { code?: string; message?: string }):
         return ApiErrors.conflict(
           "Bestehendes PDF-Dokument passt nicht zum Angebot"
         );
+      if (error.message === "OFFER_NOT_ACCEPTED")
+        return ApiErrors.conflict(
+          "Auftragsbestätigung erfordert accepted Angebot"
+        );
+      if (error.message === "OLD_CONTRACT_DOCUMENT_MISMATCH")
+        return ApiErrors.conflict(
+          "Bestehendes Auftragsbestätigungs-Dokument passt nicht zum Angebot"
+        );
+      if (error.message === "INVALID_CONTRACT_STORAGE_PATH")
+        return ApiErrors.unprocessable("Ungültiger Contract-Storage-Pfad");
+      if (error.message === "INVALID_CONTRACT_FILE_SIZE")
+        return ApiErrors.unprocessable("Ungültige Contract-Dateigröße");
       return ApiErrors.unprocessable("Anfrage konnte nicht verarbeitet werden");
     case "23502": // not_null_violation
       return ApiErrors.unprocessable("Pflichtfeld fehlt");

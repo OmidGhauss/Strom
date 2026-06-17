@@ -257,6 +257,31 @@ export function assertOfferSendable(
   }
 }
 
+// Section 20: Auftragsbestätigungs-PDF-Generierung (technisch: contract_pdf).
+// Nur Manager/Admin — Employee kann accepted nie setzen.
+// accepted-only: kein Contract für draft/sent/rejected/expired/superseded.
+// superseded vor status-Check vor role-Check: einheitliches Info-Leak-Verhalten.
+export function assertContractGenerationAllowed(
+  role: UserRole,
+  status: string
+): void {
+  if (status === "superseded") {
+    throw ApiErrors.conflict(
+      "Superseded Angebote können keine Auftragsbestätigung generieren"
+    );
+  }
+  if (status !== "accepted") {
+    throw ApiErrors.conflict(
+      "Auftragsbestätigung nur für accepted Angebote möglich"
+    );
+  }
+  if (role === "employee") {
+    throw ApiErrors.forbidden(
+      "Nur Manager und Admin dürfen Auftragsbestätigungen generieren"
+    );
+  }
+}
+
 // Section 1: Employee-eigenes Profil: nur full_name erlaubt.
 const EMPLOYEE_PROFILE_WHITELIST = ["full_name"] as const;
 

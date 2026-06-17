@@ -1532,3 +1532,88 @@ SDK-Typ: `content?: string | Buffer` — Buffer direkt akzeptiert, kein Base64.
 ### Ergebnis
 
 - `npx tsc --noEmit` → Exit 0, 0 Fehler
+
+---
+
+## Block 20: Contract-/Abschluss-Pipeline (Auftragsbestätigung-PDF) ✓
+
+Abgeschlossen: 2026-06-17
+
+### Erledigte Schritte
+
+- [x] Migration: `supabase/migrations/20260619000001_block20_contract_pdf.sql`
+  - `ALTER TABLE offers ADD COLUMN contract_document_id uuid NULL REFERENCES documents(id) ON DELETE SET NULL`
+  - `CREATE INDEX idx_offers_contract_document … WHERE contract_document_id IS NOT NULL`
+  - RPC `register_contract_pdf` mit Parametervalidierung
+- [x] `src/lib/pdf/contract-pdf.ts` — `generateContractPdf(offer, lead)` — Header "AUFTRAGSBESTÄTIGUNG"
+- [x] `src/lib/api/guards.ts` — `assertContractGenerationAllowed(role, status)`
+- [x] `src/lib/api/errors.ts` — 4 neue P0001-Mappings
+- [x] `src/types/database.ts` — `Offer.contract_document_id`, `register_contract_pdf` in Functions
+- [x] `src/app/api/leads/[id]/offers/[offerId]/contract/route.ts` — vollständiger POST-Flow
+
+### Fachliche Klarstellung
+
+`contract_pdf` ist der technische Dokumenttyp aus Block 6 (Enum). Das V1-PDF
+ist eine **Auftragsbestätigung** basierend auf einem accepted Offer — kein
+rechtsverbindliches Vertragsdokument. Kein Rechtstext, kein Signaturfluss.
+Rechtliche Prüfung vor Go-Live erforderlich.
+
+| Kontext | Bezeichnung |
+|---------|-------------|
+| DB `document_type` | `contract_pdf` |
+| API-Endpunkt | `POST …/contract` |
+| PDF-Header (sichtbar) | `AUFTRAGSBESTÄTIGUNG` |
+| Dateiname | `Auftragsbestaetigung-{offer_number}.pdf` |
+
+### Implementierungsdetails
+
+#### Sicherheitsinvarianten
+
+- **Nur Manager/Admin:** Employee → 403 (Employee kann `accepted` ohnehin nicht setzen)
+- **accepted-only:** superseded → 409; alle anderen Statuse → 409
+- **superseded vor status-Check vor role-Check:** kein Info-Leak
+- **adminClient** erst nach positivem user-aware RLS-Gate (Offer-SELECT)
+- **Kein Client-Input für Storage-Pfad:** server-seitig generiert `${leadId}/contract_pdf/${uuid}.pdf`
+
+#### RPC `register_contract_pdf`
+
+Analog `register_offer_pdf` (Block 18). Zusätzlich: serverseitige Parametervalidierung:
+- `p_file_size_bytes <= 0` → `INVALID_CONTRACT_FILE_SIZE` → 422
+- `p_storage_path NOT LIKE '{lead_id}/contract_pdf/%.pdf'` → `INVALID_CONTRACT_STORAGE_PATH` → 422
+
+Vollständige P0001-Codes:
+| Code | HTTP |
+|------|------|
+| `INVALID_CONTRACT_FILE_SIZE` | 422 |
+| `INVALID_CONTRACT_STORAGE_PATH` | 422 |
+| `OFFER_NOT_FOUND` | 404 |
+| `OFFER_NOT_ACCEPTED` | 409 |
+| `OLD_CONTRACT_DOCUMENT_MISMATCH` | 409 |
+
+#### Storage-Konsistenzstrategie
+
+Identisch Block 18: Upload-then-Commit.
+- Storage upload vor RPC (kein DB-Seiteneffekt bei Upload-Fehler)
+- RPC-Fehler → best-effort cleanup neues File
+- RPC-Erfolg → best-effort cleanup altes File
+
+### Bewusst NICHT enthalten
+
+- Kein automatischer Lead-Status-Übergang zu `contract_prepared`
+- Kein E-Mail-Versand der Auftragsbestätigung (wäre Block 21)
+- Kein Signaturfluss / externer Dienst
+- Kein OCR
+- Kein Contract-Versioning (Regenerierung ersetzt immer)
+- Kein juristischer Vertragstext
+- Kein Frontend/UI
+
+### Technische Schuld
+
+- Lead-Status muss manuell auf `contract_prepared` gesetzt werden
+- V1-PDF ist keine Rechtsurkunde; Rechtsprüfung vor Go-Live nötig
+- Kein Contract-Versioning / Änderungshistorie
+- Orphan-Storage-File wenn Admin das Dokument direkt löscht (ON DELETE SET NULL)
+
+### Ergebnis
+
+- `npx tsc --noEmit` → Exit 0, 0 Fehler

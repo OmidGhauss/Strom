@@ -184,6 +184,7 @@ export type Offer = {
   created_by: string | null;
   parent_offer_id: string | null;
   pdf_document_id: string | null;
+  contract_document_id: string | null;
   offer_number: string;
   version: number;
   provider_name: string;
@@ -306,7 +307,7 @@ export type Database = {
       offers: {
         Row: Offer;
         Insert: Omit<Offer, "id" | "offer_number" | "created_at" | "updated_at">;
-        Update: Partial<Omit<Offer, "id" | "lead_id" | "offer_number" | "created_at">>;
+        Update: Partial<Omit<Offer, "id" | "lead_id" | "offer_number" | "created_at" | "pdf_document_id" | "contract_document_id">>;
         Relationships: never[];
       };
       communications_log: {
@@ -363,6 +364,21 @@ export type Database = {
           old_product_type: string;
           new_product_type: string;
           energy_types: string[];
+        }>;
+      };
+      register_contract_pdf: {
+        Args: {
+          p_offer_id:        string;
+          p_lead_id:         string;
+          p_new_document_id: string;
+          p_file_name:       string;
+          p_storage_path:    string;
+          p_file_size_bytes: number;
+        };
+        Returns: Array<{
+          document_id:        string;
+          old_storage_bucket: string | null;
+          old_storage_path:   string | null;
         }>;
       };
       register_offer_pdf: {
