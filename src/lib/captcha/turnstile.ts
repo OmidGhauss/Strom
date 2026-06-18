@@ -1,7 +1,10 @@
 export async function verifyTurnstile(token: string, ip: string): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY;
 
-  // Kein Secret → Dev/Test-Bypass
+  // Dev/Demo-Bypass: kein TURNSTILE_SECRET_KEY gesetzt → Verifikation übersprungen.
+  // TECHNISCHE SCHULD: Für Production muss TURNSTILE_SECRET_KEY in den
+  // Deployment-Umgebungsvariablen gesetzt sein. Ohne diesen Key ist jeder
+  // Token gültig, unabhängig vom Client.
   if (!secret) return true;
 
   let response: Response;

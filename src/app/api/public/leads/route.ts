@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiErrors, handleSupabaseError } from "@/lib/api/errors";
 import * as z from "zod";
 import { PublicLeadSchema } from "@/lib/validation/public-lead";
-import type { PublicLeadInput } from "@/lib/validation/public-lead";
+import { buildEnergyDemands, buildAddress, buildInitialNote } from "@/lib/api/lead";
 import { verifyTurnstile } from "@/lib/captcha/turnstile";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -13,57 +13,6 @@ function getClientIp(request: NextRequest): string {
     request.headers.get("x-real-ip") ??
     "anonymous"
   );
-}
-
-function buildEnergyDemands(
-  productType: "electricity" | "gas" | "both",
-  electricity?: PublicLeadInput["electricity"],
-  gas?: PublicLeadInput["gas"],
-): Array<{
-  energy_type: "electricity" | "gas";
-  annual_consumption_kwh: number | null;
-  consumption_known: boolean | null;
-  hot_water_with_gas: boolean | null;
-}> {
-  const demands: Array<{
-    energy_type: "electricity" | "gas";
-    annual_consumption_kwh: number | null;
-    consumption_known: boolean | null;
-    hot_water_with_gas: boolean | null;
-  }> = [];
-
-  if (productType === "electricity" || productType === "both") {
-    demands.push({
-      energy_type: "electricity",
-      annual_consumption_kwh: electricity?.annual_consumption_kwh ?? null,
-      consumption_known: electricity?.consumption_known ?? null,
-      hot_water_with_gas: null,
-    });
-  }
-
-  if (productType === "gas" || productType === "both") {
-    demands.push({
-      energy_type: "gas",
-      annual_consumption_kwh: gas?.annual_consumption_kwh ?? null,
-      consumption_known: gas?.consumption_known ?? null,
-      hot_water_with_gas: gas?.hot_water_with_gas ?? null,
-    });
-  }
-
-  return demands;
-}
-
-function buildAddress(address?: PublicLeadInput["address"]): Record<string, unknown> | null {
-  if (!address) return null;
-  return {
-    street: address.street ?? null,
-    house_number: address.house_number ?? null,
-    address_addition: address.address_addition ?? null,
-    postal_code: address.postal_code ?? null,
-    city: address.city ?? null,
-    state: address.state ?? null,
-    country: address.country ?? "DE",
-  };
 }
 
 export async function POST(request: NextRequest) {
@@ -125,6 +74,12 @@ export async function POST(request: NextRequest) {
     p_address: buildAddress(body.address),
     p_energy_demands: buildEnergyDemands(body.product_type, body.electricity, body.gas),
     p_referral_code: body.referral_code ?? null,
+    p_initial_note: buildInitialNote({
+      ziele: body.ziele,
+      erreichbarkeit: body.erreichbarkeit,
+      rechnung_dateiname: body.rechnung_dateiname,
+      rechnung_groesse_kb: body.rechnung_groesse_kb,
+    }),
   });
 
   if (error) return handleSupabaseError(error);

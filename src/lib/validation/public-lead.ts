@@ -3,12 +3,28 @@ import * as z from "zod";
 const ElectricityInput = z.object({
   annual_consumption_kwh: z.number().positive().max(9_999_999.99).nullable().optional(),
   consumption_known: z.boolean().nullable().optional(),
+  current_provider: z.string().trim().max(200).optional(),
+  monthly_payment: z.number().min(0).optional(),
+  contract_end_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datumsformat (YYYY-MM-DD)")
+    .optional(),
+  price_guarantee: z.boolean().optional(),
 });
 
 const GasInput = z.object({
   annual_consumption_kwh: z.number().positive().max(9_999_999.99).nullable().optional(),
   consumption_known: z.boolean().nullable().optional(),
   hot_water_with_gas: z.boolean().nullable().optional(),
+  current_provider: z.string().trim().max(200).optional(),
+  monthly_payment: z.number().min(0).optional(),
+  contract_end_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Ungültiges Datumsformat (YYYY-MM-DD)")
+    .optional(),
+  price_guarantee: z.boolean().optional(),
+  heating_type: z.string().trim().max(100).optional(),
+  household_size: z.number().int().min(1).optional(),
 });
 
 const AddressInput = z.object({
@@ -64,6 +80,12 @@ export const PublicLeadSchema = z
       },
       z.string().regex(/^[A-Z0-9-]{3,32}$/).optional(),
     ),
+
+    // Kein DB-Feld — werden in leads.notes gespeichert (via p_initial_note im RPC).
+    ziele: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
+    erreichbarkeit: z.string().trim().max(500).optional(),
+    rechnung_dateiname: z.string().trim().max(500).optional(),
+    rechnung_groesse_kb: z.number().int().min(0).max(10 * 1024).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.product_type === "electricity" || data.product_type === "both") {

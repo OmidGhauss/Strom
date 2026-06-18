@@ -1,3 +1,5 @@
+import type { PublicLeadEnergyDemand } from "@/lib/api/lead";
+
 // Manuell gepflegte DB-Typen auf Basis der Supabase-Migrationen (Block 2–9a).
 // Ersetzt bis zur Einrichtung von `supabase gen types typescript` die generierten Typen.
 
@@ -100,6 +102,7 @@ export type Lead = {
   privacy_consent: boolean;
   contact_consent: boolean;
   data_transfer_consent: boolean | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -342,7 +345,27 @@ export type Database = {
       is_manager_or_above: { Args: Record<never, never>; Returns: boolean };
       can_access_lead: { Args: { p_lead_id: string }; Returns: boolean };
       submit_public_lead: {
-        Args: Record<string, unknown>;
+        Args: {
+          p_first_name: string;
+          p_last_name: string;
+          p_email: string;
+          p_customer_type: CustomerType;
+          p_product_type: ProductType;
+          p_privacy_consent: boolean;
+          p_contact_consent: boolean;
+          p_phone?: string | null;
+          p_data_transfer_consent?: boolean | null;
+          p_source?: string | null;
+          p_utm_source?: string | null;
+          p_utm_medium?: string | null;
+          p_utm_campaign?: string | null;
+          p_utm_term?: string | null;
+          p_utm_content?: string | null;
+          p_address?: Record<string, unknown> | null;
+          p_energy_demands?: PublicLeadEnergyDemand[];
+          p_referral_code?: string | null;
+          p_initial_note?: string | null;
+        };
         Returns: { lead_id: string; lead_number: string };
       };
       change_lead_status: {
